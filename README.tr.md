@@ -70,6 +70,9 @@ Renkli adımlar, işlem bağlantıları, onaylar, süre ve bakiye/gas özeti gö
 Saat dilimi Europe/Istanbul. Son durum `reports/run-latest.json`; her tur için JSON ve `.log` tutulur.
 Anahtar, log, deploy adresi ve derleme dosyaları yerelde kalır.
 Hata verdiğinde önceki başarılı işlemler geri alınmaz. Kesintide rapordaki hash'i kontrol etmeden yeniden başlatma.
+İşlem hash'i gönderimden önce kaydedilir; belirsiz işlem varsa yeni gönderim engellenir.
 `scripts/read-key.ps1` iç yardımcıdır ve doğrudan çalıştırılmamalıdır.
 
 [Teknik ayrıntılar](README.md) · [Resmî rehber](https://qms.finance/news/welcome-to-qms-testnet) · [MIT](LICENSE).
+
+[Güvenlik önlemleri ve inceleme kapsamı](SECURITY.md).

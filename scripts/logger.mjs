@@ -94,7 +94,7 @@ export function createLogger({ write = line => console.log(line), record = () =>
       }
       if (result.hash && result.explorer?.includes('/tx/')) {
         pending = true;
-        detail(`Gönderildi: ${shortHash(result.hash)}`, 'yellow');
+        detail(`${result.status === 'broadcast-unknown' ? 'Gönderim belirsiz; hash kaydedildi' : 'Gönderildi'}: ${shortHash(result.hash)}`, 'yellow');
         detail(result.explorer, 'dim');
       }
       if (result.status === 'confirmed') {

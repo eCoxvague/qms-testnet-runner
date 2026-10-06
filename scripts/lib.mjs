@@ -1,15 +1,16 @@
-import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { JsonRpcProvider, FetchRequest, Wallet, parseEther, formatEther } from 'ethers';
+import { JsonRpcProvider, FetchRequest, Wallet, Transaction, getAddress, keccak256, parseEther, formatEther } from 'ethers';
+import { writeAtomic } from './storage.mjs';
+import { createJournal } from './tx-journal.mjs';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
 export const config = JSON.parse(readFileSync(resolve(root, 'config/qms-testnet.json'), 'utf8'));
 export function save(relative, data) {
   const file = resolve(root, relative);
-  mkdirSync(resolve(file, '..'), { recursive: true });
-  writeFileSync(file, JSON.stringify(data, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2) + '\n');
+  writeAtomic(file, JSON.stringify(data, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2) + '\n');
   return file;
 }
 export function output(data) {
@@ -29,7 +30,9 @@ export async function connect() {
 }
 export function loadWallet(provider) {
   let key = process.env.QMS_PRIVATE_KEY;
+  let password = process.env.QMS_KEYSTORE_PASSWORD;
   delete process.env.QMS_PRIVATE_KEY;
+  delete process.env.QMS_KEYSTORE_PASSWORD;
   if (!key && process.platform === 'win32' && existsSync(resolve(root, '.secrets/qms-key.dpapi'))) {
     try {
       // stdout is captured in memory; never inherited by the terminal or logged.
@@ -38,21 +41,33 @@ export function loadWallet(provider) {
     } catch { throw new Error('Sifreli anahtar okunamadi. npm run key:import calistirin.'); }
   }
   if (!key && existsSync(resolve(root, '.secrets/qms-keystore.json'))) {
-    let password = process.env.QMS_KEYSTORE_PASSWORD;
-    delete process.env.QMS_KEYSTORE_PASSWORD;
     if (!password) throw new Error('Keystore kilitli. npm start ile gizli parola girisi yapin.');
     try {
       const wallet = Wallet.fromEncryptedJsonSync(readFileSync(resolve(root, '.secrets/qms-keystore.json'), 'utf8'), password);
-      return provider ? wallet.connect(provider) : wallet;
+      return assertWallet(provider ? wallet.connect(provider) : wallet);
     } catch { throw new Error('Keystore acilamadi; parola veya dosya gecersiz.'); }
     finally { password = undefined; }
   }
   if (!key) throw new Error('Anahtar yok. npm run key:import ile yerelde yukleyin.');
   key = key.trim().replace(/^0x/, '');
   if (!/^[a-fA-F0-9]{64}$/.test(key)) throw new Error('Private key formati gecersiz.');
-  try { return new Wallet('0x' + key, provider); }
+  try { return assertWallet(new Wallet('0x' + key, provider)); }
   catch { throw new Error('Private key gecersiz.'); }
   finally { key = undefined; }
+}
+function assertWallet(wallet) {
+  const expected = process.env.QMS_EXPECTED_ADDRESS;
+  if (expected && wallet.address.toLowerCase() !== expected.toLowerCase())
+    throw new Error('Akis sirasinda kayitli cuzdan degisti; islem durduruldu.');
+  return wallet;
+}
+export function childEnvironment(command, expectedAddress) {
+  const env = { ...process.env };
+  if (['status', 'quote', 'block', 'compile', 'help'].includes(command)) {
+    delete env.QMS_PRIVATE_KEY; delete env.QMS_KEYSTORE_PASSWORD;
+  }
+  if (expectedAddress) env.QMS_EXPECTED_ADDRESS = expectedAddress;
+  return env;
 }
 export function amountQms(value) {
   if (!/^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/.test(value)) throw new Error('QMS miktari pozitif ondalik olmali.');
@@ -78,7 +93,11 @@ export function safeError(error) {
   // Ethers error objects can contain signed transactions or request bodies.
   // Only a short message is allowed to reach stdout/stderr.
   const message = error?.shortMessage ?? error?.message ?? 'Bilinmeyen hata';
-  return String(message).replace(/(?:0x)?[a-fA-F0-9]{64,}/g, '[hex gizlendi]').slice(0, 450);
+  return String(message)
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g, ' ')
+    .replace(/(?:0x)?[a-fA-F0-9]{64,}/g, '[hex gizlendi]').slice(0, 450);
 }
 export async function jsonFetch(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(25000) });
@@ -89,7 +108,9 @@ export async function jsonFetch(url) {
   }
   return res.json();
 }
-export async function submit(provider, wallet, tx, label, broadcast) {
+export async function submit(provider, wallet, tx, label, broadcast, journalRoot = root, emit = output) {
+  if ((tx.value ?? 0n) < 0n || (tx.value ?? 0n) > parseEther(config.maxActionQms))
+    throw new Error('Islem native miktar sinirini asiyor.');
   assertTestnet(await provider.send('eth_chainId', []));
   const transaction = { ...tx, from: wallet.address };
   const estimated = await provider.estimateGas(transaction);
@@ -98,24 +119,58 @@ export async function submit(provider, wallet, tx, label, broadcast) {
   if (fees.maxFeePerGas == null || fees.maxPriorityFeePerGas == null)
     throw new Error('EIP-1559 gas verisi alinamadi.');
   const maxFee = checkBudget(await provider.getBalance(wallet.address), tx.value ?? 0n, gasLimit, fees.maxFeePerGas);
-  output({ action: label, mode: broadcast ? 'broadcast' : 'simulation', from: wallet.address,
+  emit({ action: label, mode: broadcast ? 'broadcast' : 'simulation', from: wallet.address,
     to: tx.to ?? 'contract creation', valueQms: formatEther(tx.value ?? 0n), gasLimit,
     maxFeeQms: formatEther(maxFee), reserveQms: config.reserveQms });
   if (!broadcast) return null;
-  const sent = await wallet.sendTransaction({ ...transaction, chainId: config.chainId, type: 2, gasLimit,
-    maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas });
-  const reportPath = `reports/tx-${sent.hash}.json`;
-  const pending = { action: label, chainId: config.chainId, hash: sent.hash,
-    from: wallet.address, to: sent.to, submittedAt: new Date().toISOString(), status: 'pending',
-    explorer: `${config.explorerUrl}/tx/${sent.hash}` };
-  save(reportPath, pending);
-  output({ hash: sent.hash, explorer: pending.explorer });
-  // Do not use safe/finalized: QMS currently returns genesis for those tags.
-  const receipt = await sent.wait(config.confirmations, config.receiptTimeoutMs);
-  if (!receipt || receipt.status !== 1) throw new Error('Islem basarisiz veya receipt bulunamadi.');
-  save(reportPath, { ...pending, status: 'confirmed', blockNumber: receipt.blockNumber,
-    gasUsed: receipt.gasUsed, feeQms: formatEther(receipt.fee), contractAddress: receipt.contractAddress });
-  output({ status: 'confirmed', blockNumber: receipt.blockNumber, confirmations: config.confirmations,
-    feeQms: formatEther(receipt.fee) });
-  return receipt;
+  const journal = createJournal(journalRoot, config.chainId, wallet.address);
+  const release = journal.acquire();
+  let raw;
+  try {
+    await journal.checkUnresolved(provider, config.confirmations);
+    assertTestnet(await provider.send('eth_chainId', []));
+    checkBudget(await provider.getBalance(wallet.address), tx.value ?? 0n, gasLimit, fees.maxFeePerGas);
+    const populated = await wallet.populateTransaction({ ...transaction, chainId: config.chainId, type: 2, gasLimit,
+      maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas });
+    raw = await wallet.signTransaction(populated);
+    const decoded = Transaction.from(raw);
+    assertTestnet(decoded.chainId);
+    if (decoded.type !== 2 || decoded.from?.toLowerCase() !== wallet.address.toLowerCase()
+        || decoded.to !== (tx.to ? getAddress(tx.to) : null) || decoded.value !== (tx.value ?? 0n)
+        || decoded.gasLimit !== gasLimit || decoded.maxFeePerGas !== fees.maxFeePerGas)
+      throw new Error('Imzalanan islem beklenen cuzdan/hedef/miktar/gas ile eslesmiyor; gonderilmedi.');
+    const hash = keccak256(raw);
+    const record = { action: label, chainId: config.chainId, hash, nonce: decoded.nonce,
+      from: wallet.address, to: decoded.to, preparedAt: new Date().toISOString(), status: 'prepared',
+      explorer: `${config.explorerUrl}/tx/${hash}` };
+    // Persist the hash BEFORE any network send. Never persist the replayable signed payload.
+    journal.write(record);
+    try {
+      await provider.broadcastTransaction(raw);
+    } catch {
+      journal.write({ ...record, status: 'broadcast-unknown' });
+      emit({ hash, explorer: record.explorer, status: 'broadcast-unknown' });
+      throw new Error('RPC gonderim sonucu belirsiz. Hash kaydedildi; yeni islem gondermeden explorer kontrol edin.');
+    } finally { raw = undefined; }
+    journal.write({ ...record, status: 'submitted', submittedAt: new Date().toISOString() });
+    emit({ hash, explorer: record.explorer, status: 'submitted' });
+    // Do not use safe/finalized: QMS currently returns genesis for those tags.
+    let receipt;
+    try { receipt = await provider.waitForTransaction(hash, config.confirmations, config.receiptTimeoutMs); }
+    catch {
+      journal.write({ ...record, status: 'receipt-timeout' });
+      throw new Error('Receipt bekleme sonucu belirsiz. Hash kayitli; tekrar gondermeden explorer kontrol edin.');
+    }
+    if (!receipt) {
+      journal.write({ ...record, status: 'receipt-timeout' });
+      throw new Error('Receipt bulunamadi; islem hash kaydini kontrol edin.');
+    }
+    const status = receipt.status === 1 ? 'confirmed' : 'reverted';
+    journal.write({ ...record, status, blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed, feeQms: formatEther(receipt.fee), contractAddress: receipt.contractAddress });
+    if (status !== 'confirmed') throw new Error('Islem zincirde revert etti; receipt kaydedildi.');
+    emit({ status, blockNumber: receipt.blockNumber, confirmations: config.confirmations,
+      feeQms: formatEther(receipt.fee) });
+    return receipt;
+  } finally { raw = undefined; release(); }
 }

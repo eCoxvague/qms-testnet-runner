@@ -60,7 +60,8 @@ test('portable key setup writes encrypted data and the CLI loader rejects incorr
     assert.ok(!messages.join('\n').includes(wallet.privateKey));
     mkdirSync(join(fixture, 'scripts'));
     mkdirSync(join(fixture, 'config'));
-    copyFileSync(join(root, 'scripts/lib.mjs'), join(fixture, 'scripts/lib.mjs'));
+    for (const name of ['lib.mjs', 'storage.mjs', 'tx-journal.mjs'])
+      copyFileSync(join(root, 'scripts', name), join(fixture, 'scripts', name));
     copyFileSync(join(root, 'config/qms-testnet.json'), join(fixture, 'config/qms-testnet.json'));
     const { loadWallet } = await import(pathToFileURL(join(fixture, 'scripts/lib.mjs')).href);
     delete process.env.QMS_PRIVATE_KEY;

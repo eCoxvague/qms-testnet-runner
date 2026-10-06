@@ -15,6 +15,7 @@
     "compile": "node scripts/qms.mjs compile",
     "smoke": "node scripts/rpc-smoke.mjs",
     "test": "node --test",
+    "security:check": "node scripts/security-check.mjs",
     "key:import": "node scripts/import-key.mjs"
   },
   "dependencies": { "ethers": "6.17.0", "solc": "0.8.37" },

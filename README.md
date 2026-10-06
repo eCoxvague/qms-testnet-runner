@@ -111,6 +111,7 @@ Times use `Europe/Istanbul`. All these outputs are excluded from Git:
 - `deployments/` and `artifacts/`: addresses and compiler output
 
 Receipt timeout is 180 seconds; a timeout does not prove failure.
+Hash/nonce metadata are journaled before broadcast. Unresolved sends block new submissions; signed payloads are not saved.
 Check recorded hashes in the explorer before repeating a run.
 If approval succeeds but deposit fails, that limited approval remains on chain.
 If a stopped process leaves `.cache/run-all.lock`, verify no runner is active and check transaction status before removing it.
@@ -134,6 +135,7 @@ Testnet state can be reset.
 ```sh
 npm ci
 npm test
+npm run security:check
 npm run compile
 npm audit
 ```
@@ -142,3 +144,5 @@ Optional live read-only simulation: `npm run smoke`. Individual tools: `npm run 
 CI checks Windows, Linux and macOS without wallet keys. DPAPI tests run on Windows.
 Standard JSON for optional explorer verification: `artifacts/standard-input.json`.
 Source verification is not automatically submitted. [MIT](LICENSE).
+
+[Security controls and review scope](SECURITY.md).

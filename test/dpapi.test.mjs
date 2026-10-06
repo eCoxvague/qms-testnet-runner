@@ -48,6 +48,19 @@ $PSModuleAutoloadingPreference = 'None'
 . ${quotePs(join(scriptsDir, 'read-key.ps1'))}
 `);
       assert.ok(read() === dummyKey, 'New format must decrypt to its original input');
+      // Existing encrypted files must also be replaced atomically on a repeated import.
+      powershell(`
+$ErrorActionPreference = 'Stop'
+$PSModuleAutoloadingPreference = 'None'
+function Read-Host {
+    param([string]$Prompt, [switch]$AsSecureString)
+    $secure = [Security.SecureString]::new()
+    foreach ($character in ('0x' + ('01' * 32)).ToCharArray()) { $secure.AppendChar($character) }
+    return $secure
+}
+. ${quotePs(join(scriptsDir, 'import-key.ps1'))}
+`);
+      assert.ok(read() === dummyKey, 'Replacing an existing encrypted file must preserve the valid key');
       // Generate a genuine legacy Windows PowerShell DPAPI blob, rather than imitating its encoding.
       const legacy = powershell(`
 $ErrorActionPreference = 'Stop'

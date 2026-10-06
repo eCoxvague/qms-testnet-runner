@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { resolve, dirname } from 'node:path';
+import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { Wallet } from 'ethers';
 import { readSecret } from './secret-input.mjs';
+import { writeAtomic } from './storage.mjs';
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
 export const keystoreFile = resolve(projectRoot, '.secrets/qms-keystore.json');
@@ -39,9 +40,7 @@ export async function importPortableKey({ secret = readSecret, file = keystoreFi
     if (password !== confirmation) throw new Error('Passwords do not match.');
     write('Encrypting the local keystore...');
     const encrypted = await wallet.encrypt(password);
-    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-    writeFileSync(file, encrypted + '\n', { mode: 0o600 });
-    if (process.platform !== 'win32') { chmodSync(dirname(file), 0o700); chmodSync(file, 0o600); }
+    writeAtomic(file, encrypted + '\n', { secret: true });
     write('Encrypted keystore saved locally in .secrets/.');
     return password;
   } finally { key = undefined; confirmation = undefined; password = undefined; }

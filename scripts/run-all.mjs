@@ -3,7 +3,7 @@ import { mkdirSync, openSync, closeSync, unlinkSync, appendFileSync } from 'node
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { parseArgs } from 'node:util';
-import { root, config, save } from './lib.mjs';
+import { root, config, save, childEnvironment } from './lib.mjs';
 import { runWorkflow, parseOutput, createOutputParser } from './workflow.mjs';
 import { createLogger } from './logger.mjs';
 
@@ -27,7 +27,7 @@ async function execute(args, name) {
   if (interrupted) throw new Error('Akis kullanici tarafindan durduruldu.');
   return new Promise((accept, reject) => {
     child = spawn(process.execPath, [resolve(root, 'scripts/qms.mjs'), ...args],
-      { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+      { cwd: root, env: childEnvironment(args[0], lastReport?.address), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let stdout = '', stderr = '';
     let parseError;
     const parser = createOutputParser(result => logger.result(result));

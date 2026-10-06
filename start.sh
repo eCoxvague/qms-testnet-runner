@@ -9,5 +9,5 @@ if [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 22 ]; then
   echo 'Node.js 22 or newer is required.' >&2
   exit 1
 fi
-npm ci --no-fund
+npm ci --no-fund --ignore-scripts
 node scripts/start.mjs "$@"
