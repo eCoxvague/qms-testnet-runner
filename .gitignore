@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.secrets/
+.cache/
+artifacts/
+reports/
+deployments/
+*.log
+docs/test-run-*.md
+docs/discord-feedback.md
+.DS_Store
+Thumbs.db

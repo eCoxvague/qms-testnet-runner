@@ -1,0 +1,27 @@
+{
+  "chainId": 19480,
+  "name": "QMS Testnet",
+  "rpcUrl": "https://rpc.testnet.qms.finance",
+  "explorerUrl": "https://testnet.qmsscan.io",
+  "faucetUrl": "https://faucet.testnet.qms.finance",
+  "qwapUrl": "https://testnet.qwap.xyz",
+  "confirmations": 2,
+  "receiptTimeoutMs": 180000,
+  "reserveQms": "0.1",
+  "maxGasQms": "0.05",
+  "maxActionQms": "1",
+  "slippageBps": 100,
+  "contracts": {
+    "factory": "0x93AFD9aC50822F82c7C4f2Ec8Ec2463b086Fb878",
+    "router": "0x93AFF45f28e5DF1b55f5AEFEfB807De843b12619",
+    "wqms": "0x9AA510295aC664A3d5A3182a3eFe959DE2B12c34",
+    "usdc": "0xDfF68E53a0A8275212927c12017f5aB5f1842a04",
+    "wqmsUsdcPair": "0x07e2fc733B75e8107342b58fb49aE311C4DB0643"
+  },
+  "sources": [
+    "https://qms.finance/news/welcome-to-qms-testnet",
+    "https://docs.qms.finance/for-developers/network-and-rpc",
+    "https://docs.qms.finance/for-developers/evm-compatibility",
+    "https://testnet.qwap.xyz/"
+  ]
+}

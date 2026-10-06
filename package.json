@@ -1,0 +1,22 @@
+{
+  "name": "qms-testnet-runner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "One-command QMS testnet runner with local encrypted wallet setup, QWAP swaps and liquidity, and QUBO verification.",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/eCoxvague/qms-testnet-runner.git" },
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node scripts/start.mjs",
+    "all": "node scripts/run-all.mjs --broadcast",
+    "qms": "node scripts/qms.mjs",
+    "status": "node scripts/qms.mjs status",
+    "compile": "node scripts/qms.mjs compile",
+    "smoke": "node scripts/rpc-smoke.mjs",
+    "test": "node --test",
+    "key:import": "node scripts/import-key.mjs"
+  },
+  "dependencies": { "ethers": "6.17.0", "solc": "0.8.37" },
+  "overrides": { "solc": { "tmp": "0.2.7" } }
+}
