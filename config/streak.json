@@ -1,0 +1,13 @@
+{
+  "id": "2026-10-19",
+  "title": "QWAP Testnet Streak",
+  "startsAt": "2026-10-19T13:00:00.000Z",
+  "days": 7,
+  "requiredDays": 6,
+  "swapAmountQms": "0.2",
+  "liquidityAmountQms": "0.1",
+  "slippageBps": 100,
+  "role": "standard",
+  "points": { "standard": { "daily": 8, "bonus": 14 }, "boosted": { "daily": 10, "bonus": 18 } },
+  "source": "User-provided QMS Discord announcement: starts Monday 19 Oct 2026 at 13:00 UTC; daily reset 13:00 UTC; swap + LP; any 6 of 7 days."
+}

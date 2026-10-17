@@ -38,8 +38,8 @@ function fixture() {
     populateTransaction: async tx => ({ ...tx, nonce: state.nonce++ }),
     signTransaction: async tx => { state.signatures++; state.raw = await account.signTransaction(tx); return state.raw; },
   };
-  const send = broadcast => submit(provider, wallet, { to: '0x0000000000000000000000000000000000000002', value: 0n },
-    'audit test', broadcast, folder, () => {});
+  const send = (broadcast, label = 'audit test') => submit(provider, wallet, { to: '0x0000000000000000000000000000000000000002', value: 0n },
+    label, broadcast, folder, () => {});
   const cleanup = () => {
     assert.equal(dirname(resolve(folder)), cache);
     rmSync(folder, { recursive: true, force: true });
@@ -145,4 +145,47 @@ test('untrusted error messages cannot emit terminal escape sequences, bidi contr
   const text = safeError(new Error('\x1b]52;c;dGVzdA==\x07\x1b[31merror\nforged\u202ereversed'));
   assert.ok(!/[\x00-\x1f\x7f-\x9f\u202a-\u202e]/.test(text));
   assert.ok(!text.includes('dGVzdA=='));
+});
+
+function scopedTask(t, f) {
+  const start = Date.parse('2026-10-19T13:00:00Z');
+  const current = { time: start + 300000 };
+  t.mock.method(Date, 'now', () => current.time);
+  const vars = { QMS_OPERATION_ID: `streak-2026-10-19:${f.account.address.slice(2).toLowerCase()}:1:swap`,
+    QMS_TASK_NOT_BEFORE: new Date(start).toISOString(), QMS_TASK_NOT_AFTER: new Date(start + 86400000).toISOString() };
+  const before = Object.fromEntries(Object.keys(vars).map(k => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  t.after(() => { for (const k of Object.keys(vars)) if (before[k] === undefined) delete process.env[k]; else process.env[k] = before[k]; });
+  f.provider.getBlock = async () => ({ timestamp: current.time / 1000 });
+  return { start, current, vars };
+}
+test('streak journal blocks a second successful action in the same UTC task day even if the parent state was lost', async t => {
+  const f = fixture();
+  try {
+    const { vars } = scopedTask(t, f);
+    await f.send(true, 'QWAP QMS -> USDC');
+    assert.equal(f.records()[0].operationId, vars.QMS_OPERATION_ID);
+    f.provider.getTransactionReceipt = f.provider.waitForTransaction;
+    await assert.rejects(f.send(true, 'QWAP QMS -> USDC'), /zaten basarili/);
+    assert.equal(f.state.broadcasts, 1); assert.equal(f.state.signatures, 1);
+  } finally { f.cleanup(); }
+});
+test('expiry between signing and sending records not-broadcast and never calls the network send', async t => {
+  const f = fixture();
+  try {
+    const { start, current } = scopedTask(t, f), sign = f.wallet.signTransaction;
+    f.wallet.signTransaction = async tx => { const raw = await sign(tx); current.time = start + 86400000; return raw; };
+    await assert.rejects(f.send(true, 'QWAP QMS -> USDC'), /gunu disinda/);
+    assert.equal(f.state.broadcasts, 0);
+    assert.equal(f.records()[0].status, 'not-broadcast');
+  } finally { f.cleanup(); }
+});
+test('a local clock ahead of campaign start cannot bypass the latest chain block time', async t => {
+  const f = fixture();
+  try {
+    const { start } = scopedTask(t, f);
+    f.provider.getBlock = async () => ({ timestamp: (start - 1000) / 1000 });
+    await assert.rejects(f.send(true, 'QWAP QMS -> USDC'), /gunu disinda/);
+    assert.equal(f.state.broadcasts, 0); assert.equal(f.state.signatures, 0);
+  } finally { f.cleanup(); }
 });

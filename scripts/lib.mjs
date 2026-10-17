@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { JsonRpcProvider, FetchRequest, Wallet, Transaction, getAddress, keccak256, parseEther, formatEther } from 'ethers';
 import { writeAtomic } from './storage.mjs';
 import { createJournal } from './tx-journal.mjs';
+import { taskContext, assertTaskWindow } from './task-context.mjs';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
 export const config = JSON.parse(readFileSync(resolve(root, 'config/qms-testnet.json'), 'utf8'));
@@ -109,6 +110,9 @@ export async function jsonFetch(url) {
   return res.json();
 }
 export async function submit(provider, wallet, tx, label, broadcast, journalRoot = root, emit = output) {
+  const task = taskContext();
+  assertTaskWindow(task);
+  if (task && task.address.toLowerCase() !== wallet.address.toLowerCase()) throw new Error('Streak cuzdan baglami eslesmiyor.');
   if ((tx.value ?? 0n) < 0n || (tx.value ?? 0n) > parseEther(config.maxActionQms))
     throw new Error('Islem native miktar sinirini asiyor.');
   assertTestnet(await provider.send('eth_chainId', []));
@@ -128,6 +132,12 @@ export async function submit(provider, wallet, tx, label, broadcast, journalRoot
   let raw;
   try {
     await journal.checkUnresolved(provider, config.confirmations);
+    await journal.checkOperation(provider, task, label);
+    if (task) {
+      const head = await provider.getBlock('latest');
+      if (!head) throw new Error('Streak icin son blok zamani okunamadi.');
+      assertTaskWindow(task, head.timestamp * 1000);
+    }
     assertTestnet(await provider.send('eth_chainId', []));
     checkBudget(await provider.getBalance(wallet.address), tx.value ?? 0n, gasLimit, fees.maxFeePerGas);
     const populated = await wallet.populateTransaction({ ...transaction, chainId: config.chainId, type: 2, gasLimit,
@@ -143,8 +153,11 @@ export async function submit(provider, wallet, tx, label, broadcast, journalRoot
     const record = { action: label, chainId: config.chainId, hash, nonce: decoded.nonce,
       from: wallet.address, to: decoded.to, preparedAt: new Date().toISOString(), status: 'prepared',
       explorer: `${config.explorerUrl}/tx/${hash}` };
+    if (task) record.operationId = task.id;
     // Persist the hash BEFORE any network send. Never persist the replayable signed payload.
     journal.write(record);
+    try { assertTaskWindow(task); }
+    catch (error) { journal.write({ ...record, status: 'not-broadcast' }); throw error; }
     try {
       await provider.broadcastTransaction(raw);
     } catch {

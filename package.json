@@ -9,6 +9,11 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "start": "node scripts/start.mjs",
+    "streak": "node scripts/start.mjs --streak",
+    "streak:prepare": "node scripts/start.mjs --streak --prepare",
+    "streak:status": "node scripts/run-streak.mjs --status",
+    "streak:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-streak-task.ps1",
+    "streak:uninstall": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/remove-streak-task.ps1",
     "all": "node scripts/run-all.mjs --broadcast",
     "qms": "node scripts/qms.mjs",
     "status": "node scripts/qms.mjs status",

@@ -5,6 +5,22 @@
 Tek komutla QMS kontrat deploy, sayaç testi, QWAP swap/likidite ve QUBO çözüm değeri kontrolü.
 Bağımsız topluluk aracıdır; resmî QMS/QWAP ürünü değildir.
 
+## 19 Ekim Testnet Streak
+
+19 Ekim 2026 Pazartesi **16:00 Türkiye** başlangıcına göre günlük 1 swap + 1 LP modu hazırdır.
+Başlangıçtan önce işlem göndermez; aynı günde tamamlanan işlemleri tekrarlamaz ve yarım kalan LP'ye devam eder.
+
+```sh
+npm run streak:prepare
+npm run streak:status
+npm run streak
+```
+
+Windows'ta otomatik çalışma için `npm run streak:install`: ilk kontrol Pazartesi **16:05**, sonra saatlik kontrol.
+Bilgisayar ve aynı kullanıcı oturumu açık olmalı. Hazırlık komutu otomatik görevi kendiliğinden etkinleştirmez.
+Kaldırma: `npm run streak:uninstall`. Puanlar yerel tahmindir; resmî Quanta/rol kontrolü yapılmaz.
+[Takvim, devam etme, bütçe ve ayrıntılar](docs/streak.md).
+
 ## Başlangıç
 
 **Node.js 22+** ve Git kur, ardından:

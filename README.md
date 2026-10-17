@@ -10,6 +10,25 @@ One command to deploy a contract, call it, swap on QWAP, add liquidity, and veri
 Community tooling based on the [official QMS onboarding guide](https://qms.finance/news/welcome-to-qms-testnet).
 Independently maintained; not an official QMS or QWAP product.
 
+## 19 October Testnet Streak
+
+Dedicated daily swap + LP mode, with UTC day boundaries, receipt/event verification, duplicate-send guards,
+partial-run recovery, and local 6-of-7 progress estimates. It reuses the current wallet and does not deploy contracts.
+
+```sh
+npm run streak:prepare
+npm run streak:status
+npm run streak
+```
+
+The seven-day campaign starts **19 October 2026 13:00 UTC** and ends **26 October 13:00 UTC**.
+Before the start, the daily command sends nothing. The default daily budget including conservative gas reserves is 0.55 QMS.
+Windows scheduling is optional: `npm run streak:install` enables a first check at 13:05 UTC on 19 October, then hourly checks.
+Completed daily actions are skipped. The computer and the same Windows user session must remain available.
+No scheduled task is installed by preparation alone. Remove it with `npm run streak:uninstall`.
+Quanta and role eligibility are **estimates, not official reward verification**.
+[Full streak guide and commands](docs/streak.md).
+
 ## Quick start
 
 Install **Node.js 22+** and Git, then clone:

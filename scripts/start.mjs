@@ -4,11 +4,16 @@ import { resolve } from 'node:path';
 import { config, root, loadWallet, safeError } from './lib.mjs';
 import { hasStoredKey, importPrivateKey, keystoreFile, dpapiFile } from './key-manager.mjs';
 import { readSecret } from './secret-input.mjs';
+import { streakWindow } from './streak-calendar.mjs';
 
 let password;
 try {
-  const args = process.argv.slice(2);
-  if (!args.includes('--help')) {
+  const originalArgs = process.argv.slice(2);
+  const streak = originalArgs.includes('--streak');
+  const args = originalArgs.filter(arg => arg !== '--streak');
+  const keyless = streak && (args.includes('--status') || (!args.includes('--prepare') && streakWindow().phase !== 'active'));
+  const needsWallet = !args.includes('--help') && !keyless;
+  if (needsWallet) {
     console.log('\nQMS Testnet Runner · local wallet setup\n');
     if (!hasStoredKey()) {
       console.log('Use a separate TESTNET wallet. Private key input is hidden.');
@@ -19,21 +24,22 @@ try {
   }
   const childEnv = { ...process.env };
   if (password !== undefined) childEnv.QMS_KEYSTORE_PASSWORD = password;
-  if (!args.includes('--help')) {
+  if (needsWallet) {
     if (password !== undefined) process.env.QMS_KEYSTORE_PASSWORD = password;
     const suppliedKey = process.env.QMS_PRIVATE_KEY;
     try {
       const wallet = loadWallet();
       console.log('Wallet: ' + wallet.address);
       console.log('Free test QMS faucet: ' + config.faucetUrl);
-      console.log('Workflow requires 0.65 QMS with default amounts and gas reserves.\n');
+      console.log(`Workflow requires ${streak ? '0.55' : '0.65'} QMS with default amounts and gas reserves.\n`);
     } finally {
       delete process.env.QMS_KEYSTORE_PASSWORD;
       if (suppliedKey !== undefined) process.env.QMS_PRIVATE_KEY = suppliedKey;
     }
   }
   const code = await new Promise((accept, reject) => {
-    const child = spawn(process.execPath, [resolve(root, 'scripts/run-all.mjs'), '--broadcast', ...args],
+    if (keyless) { delete childEnv.QMS_PRIVATE_KEY; delete childEnv.QMS_KEYSTORE_PASSWORD; }
+    const child = spawn(process.execPath, [resolve(root, streak ? 'scripts/run-streak.mjs' : 'scripts/run-all.mjs'), '--broadcast', ...args],
       { cwd: root, env: childEnv, stdio: 'inherit', windowsHide: true });
     const interrupt = () => child.kill('SIGINT');
     process.once('SIGINT', interrupt);

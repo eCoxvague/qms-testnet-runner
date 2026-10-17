@@ -43,5 +43,23 @@ export function createJournal(projectRoot, chainId, address) {
           feeQms: formatEther(receipt.fee), contractAddress: receipt.contractAddress });
       }
     },
+    async checkOperation(provider, context, action) {
+      // Repeatable approvals are allowed; successful swap/deposit actions are not repeated in a task day.
+      if (!context || !['QWAP QMS -> USDC', 'QWAP add WQMS/USDC liquidity'].includes(action) || !existsSync(folder)) return;
+      for (const name of readdirSync(folder).filter(name => /^tx-0x[\da-f]{64}\.json$/i.test(name))) {
+        const record = JSON.parse(readFileSync(resolve(folder, name), 'utf8'));
+        if (record.chainId !== chainId || record.from?.toLowerCase() !== wallet.toLowerCase()
+            || !record.operationId?.startsWith(context.group) || record.action !== action
+            || ['not-broadcast', 'reverted'].includes(record.status)) continue;
+        const receipt = await provider.getTransactionReceipt(record.hash);
+        if (!receipt) throw new Error('Onceki streak islemi belirsiz; tekrar gonderilmedi.');
+        if (receipt.status !== 1) continue;
+        const block = await provider.getBlock(receipt.blockNumber);
+        if (!block) throw new Error('Onceki streak isleminin blok zamani okunamadi.');
+        const time = block.timestamp * 1000;
+        if (time >= context.start && time < context.end)
+          throw new Error('Bu gorev gununde bu streak islemi zaten basarili; tekrar gonderilmedi.');
+      }
+    },
   };
 }

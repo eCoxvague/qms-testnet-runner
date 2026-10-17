@@ -11,6 +11,9 @@ This is a **testnet-only** local CLI, not a hosted wallet service. Use a separat
 - Private keys are used locally for signing. Network calls contain public requests or signed transactions, not private keys.
 - Read-only workflow subprocesses do not inherit the QMS private key or keystore password variables.
 - The recorded wallet address is enforced on later workflow actions to stop an accidental wallet switch.
+- The optional streak mode binds an operation ID and UTC day window to each send, checks the latest chain time,
+  and rejects a second successful swap/deposit in that task day under the wallet lock.
+- Windows streak scheduling is opt-in, uses the same logged-in user's DPAPI account, and stores no private key or password in the task definition.
 
 Local processes with access to your account, unlocked process memory, or Windows DPAPI identity may access credentials.
 Encryption at rest does not defend against a compromised computer or malicious changes to this repository.
