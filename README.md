@@ -5,7 +5,7 @@
 
 One command to deploy a contract, call it, swap on QWAP, add liquidity, and verify a block's QUBO solution value.
 
-**[Türkçe kurulum ve kullanım](README.tr.md)**
+**[Türkçe kurulum ve kullanım](README.tr.md)** · **[中文说明](README.zh.md)**
 
 Community tooling based on the [official QMS onboarding guide](https://qms.finance/news/welcome-to-qms-testnet).
 Independently maintained; not an official QMS or QWAP product.
@@ -164,4 +164,4 @@ CI checks Windows, Linux and macOS without wallet keys. DPAPI tests run on Windo
 Standard JSON for optional explorer verification: `artifacts/standard-input.json`.
 Source verification is not automatically submitted. [MIT](LICENSE).
 
-[Security controls and review scope](SECURITY.md).
+[Security controls and review scope](SECURITY.md) · [中文](SECURITY.zh.md)
