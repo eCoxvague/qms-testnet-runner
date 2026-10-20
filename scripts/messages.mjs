@@ -165,6 +165,10 @@ export const err = {
   noCommandOutput: '命令未产生结果数据。',
   streakChildStart: '无法启动 Streak 子命令。',
   streakChildStop: 'Streak 子命令已停止。',
+  daemonInterval: '守护进程检查间隔须为 1–1440 分钟。',
+  daemonNoPrepare: '请先运行 npm run streak:prepare 完成 Streak 钱包绑定。',
+  daemonWrongCampaign: 'Streak 绑定与当前 config/streak.json 活动不一致；请重新 prepare。',
+  daemonStopped: '守护进程已停止。',
 };
 
 export const log = {
@@ -203,7 +207,7 @@ npm run streak -- --dry-run
   streakWaiting: '等待交易/检查结果…',
   streakBudget: (perDay, week) =>
     `每日保守预算：${perDay} QMS；7 天 + 预留：${week} QMS。`,
-  streakPrepareDone: '准备完成；未启用定时任务。',
+  streakPrepareDone: '准备完成。常驻调度：npm run streak:daemon（或 npm run streak:daemon:install）。',
   streakStateFile: file => `状态文件：${file}`,
   streakTodayDone: '今日 swap 与 LP 已验证；不会重复发送。',
   streakWaitingProof: '存在待确认或无法验证的 Streak 交易。',
@@ -224,6 +228,17 @@ npm run streak -- --dry-run
   noCommandOutput: '命令未产生结果数据。',
   streakChildStart: '无法启动 Streak 子命令。',
   streakChildStop: 'Streak 子命令已停止。',
+  daemonStarted: (minutes, address) => `Streak 守护进程已启动 · 每 ${minutes} 分钟检查 · 钱包 ${address}`,
+  daemonTick: phase => `执行 Streak 检查 · 活动阶段：${phase}`,
+  daemonChildExit: code => `Streak 子进程结束 · 退出码 ${code}`,
+  daemonCampaignEnded: end => `活动已结束（${end}），守护进程退出。`,
+  daemonHelp: `npm run streak:daemon              常驻运行（默认每 60 分钟检查一次）
+npm run streak:daemon -- --once    只执行一轮
+npm run streak:daemon -- --interval-minutes 30
+npm run streak:daemon:install        Linux/macOS：安装 systemd 用户服务（开机自启）
+npm run streak:daemon:uninstall
+可选：在 .secrets/daemon.env 中设置 QMS_KEYSTORE_PASSWORD（勿提交 Git）`,
+  daemonNeedSetup: '缺少钱包或 Streak 准备。请先 npm run key:import 与 npm run streak:prepare。',
 };
 
 export const qmsUsage = `QMS Testnet (19480)
@@ -244,6 +259,7 @@ export const prompts = {
   privateKey: '测试钱包私钥（隐藏输入）',
   keystorePassword: '本地 keystore 密码（至少 12 个字符）',
   keystorePasswordRepeat: '再次输入 keystore 密码',
+  keystoreUnlock: '解锁本地 keystore（密码隐藏输入）',
 };
 
 export const safe = { hexHidden: '[已隐藏 hex]' };

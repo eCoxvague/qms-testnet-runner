@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { config, root, loadWallet, safeError } from './lib.mjs';
-import { log } from './messages.mjs';
+import { log, prompts } from './messages.mjs';
 import { hasStoredKey, importPrivateKey, keystoreFile, dpapiFile } from './key-manager.mjs';
 import { readSecret } from './secret-input.mjs';
 import { streakWindow } from './streak-calendar.mjs';
@@ -21,7 +21,7 @@ try {
       password = await importPrivateKey();
     }
     if (!process.env.QMS_PRIVATE_KEY && !(process.platform === 'win32' && existsSync(dpapiFile)) && existsSync(keystoreFile))
-      password ??= await readSecret('Unlock local keystore (password hidden)');
+      password ??= await readSecret(prompts.keystoreUnlock);
   }
   const childEnv = { ...process.env };
   if (password !== undefined) childEnv.QMS_KEYSTORE_PASSWORD = password;

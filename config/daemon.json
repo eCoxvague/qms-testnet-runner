@@ -1,0 +1,5 @@
+{
+  "intervalMinutes": 60,
+  "exitWhenCampaignEnded": true,
+  "logSubdir": "reports/streak-daemon"
+}

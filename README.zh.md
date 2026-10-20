@@ -20,7 +20,24 @@ npm run streak
 
 七日活动：**2026 年 10 月 19 日 13:00 UTC** 开始，**10 月 26 日 13:00 UTC** 结束。开始前每日命令不会上链。含保守 gas 预留的默认每日预算约 **0.55 QMS**。
 
-Windows 可选定时：`npm run streak:install` 在 10 月 19 日 13:05 UTC 首次检查，之后每小时检查；已完成当日动作会跳过。需保持电脑与同一 Windows 用户会话可用。仅 prepare 不会安装计划任务；卸载：`npm run streak:uninstall`。
+### 常驻自动运行（推荐）
+
+完成 `npm run streak:prepare` 后，用**守护进程** 7×24 小时按间隔自动执行 Streak（默认 **每 60 分钟** 检查；活动进行中才会上链，已完成当日会跳过）：
+
+```sh
+npm run streak:daemon
+```
+
+- **Linux/macOS 开机自启**：`npm run streak:daemon:install`（systemd 用户服务，崩溃自动重启）
+- **停止服务**：`npm run streak:daemon:uninstall`
+- **只跑一轮**：`npm run streak:daemon -- --once`
+- **改间隔**：`npm run streak:daemon -- --interval-minutes 30`
+- 日志：`reports/streak-daemon/`（含 `daemon.log` 与各次子进程输出）
+- Linux/macOS 无人值守：可在 `.secrets/daemon.env` 中设置 `QMS_KEYSTORE_PASSWORD=...`（勿提交 Git）；Windows 使用 DPAPI 时通常不需要
+
+活动结束（见 `config/streak.json`）后守护进程默认自动退出；间隔与行为可在 `config/daemon.json` 调整。
+
+Windows 仍可使用计划任务：`npm run streak:install` / `npm run streak:uninstall`（需保持用户会话登录）。
 
 Quanta 与角色资格仅为**本地估算**，非官方奖励核验。[完整 streak 说明与命令](docs/streak.md)。
 
