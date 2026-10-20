@@ -52,7 +52,7 @@ test('failed swap prevents liquidity and preserves the completed deploy and incr
 
 test('successful process exit alone cannot bypass missing deploy verification', async () => {
   const f = fixture({ invalid: 'deploy' });
-  await assert.rejects(runWorkflow({ ...f, broadcast: true }), /receipt/);
+  await assert.rejects(runWorkflow({ ...f, broadcast: true }), /收据/);
   assert.ok(!f.commands.some(args => args[0] === 'increment' || args[0] === 'swap'));
 });
 

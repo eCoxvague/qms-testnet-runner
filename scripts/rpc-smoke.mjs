@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Interface, parseEther, toQuantity } from 'ethers';
 import { connect, config, root, output, save, safeError } from './lib.mjs';
+import { err, log } from './messages.mjs';
 import { routerAbi } from './abis.mjs';
 
 // No signer, key, or sendRawTransaction: all state changes are confined to eth_call.
@@ -14,12 +15,12 @@ try {
   const overrides = { [from]: { balance: toQuantity(parseEther('100')) } };
   const runtime = await provider.send('eth_call', [{ from, data: artifact.bytecode }, 'latest', overrides]);
   if (runtime.toLowerCase() !== artifact.deployedBytecode.toLowerCase())
-    throw new Error('Deploy simülasyonunun runtime bytecode sonucu eslesmiyor.');
+    throw new Error(err.smokeDeploy);
   const counterInterface = new Interface(artifact.abi);
   const counterOverride = { ...overrides, [fakeCounter]: { code: runtime } };
   const initial = await provider.send('eth_call', [{ from, to: fakeCounter,
     data: counterInterface.encodeFunctionData('count') }, 'latest', counterOverride]);
-  if (counterInterface.decodeFunctionResult('count', initial)[0] !== 0n) throw new Error('Counter baslangic degeri gecersiz.');
+  if (counterInterface.decodeFunctionResult('count', initial)[0] !== 0n) throw new Error(err.smokeCounter);
   await provider.send('eth_call', [{ from, to: fakeCounter,
     data: counterInterface.encodeFunctionData('increment') }, 'latest', counterOverride]);
   const block = await provider.getBlock('latest');
@@ -29,13 +30,13 @@ try {
     value: toQuantity(amount), data: router.encodeFunctionData('swapExactETHForTokens',
       [1n, [config.contracts.wqms, config.contracts.usdc], from, block.timestamp + 600]) }, 'latest', overrides]);
   const amounts = router.decodeFunctionResult('swapExactETHForTokens', result)[0];
-  if (amounts[0] !== amount || amounts[1] <= 0n) throw new Error('Swap simülasyonu cikti üretmedi.');
+  if (amounts[0] !== amount || amounts[1] <= 0n) throw new Error(err.smokeSwap);
   const report = { checkedAt: new Date().toISOString(), chainId: config.chainId, method: 'eth_call with state overrides',
     deploymentSimulation: 'passed', counterReadAndIncrementSimulation: 'passed', swapSimulation: 'passed',
     inputQmsWei: amount.toString(), outputUsdcRaw: amounts[1].toString(),
-    broadcastTransactions: 0, note: 'Sanal bakiye ve kontrat kodu eth_call kapsaminda kullanildi; zincir durumu degismedi.' };
+    broadcastTransactions: 0, note: '在 eth_call 中使用虚拟余额与合约代码；链上状态未改变。' };
   save('reports/rpc-smoke.json', report);
   output(report);
 } catch (error) {
-  console.error('Hata: ' + safeError(error)); process.exitCode = 1;
+  console.error(log.errorPrefix + safeError(error)); process.exitCode = 1;
 } finally { provider?.destroy(); }

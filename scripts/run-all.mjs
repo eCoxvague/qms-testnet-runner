@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { root, config, save, childEnvironment } from './lib.mjs';
 import { runWorkflow, parseOutput, createOutputParser } from './workflow.mjs';
 import { createLogger } from './logger.mjs';
+import { err, log } from './messages.mjs';
 
 const runId = new Date().toISOString().replace(/[:.]/g, '-') + '-' + randomUUID().slice(0, 8);
 const reportPath = `reports/run-${runId}.json`;
@@ -24,7 +25,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
 });
 
 async function execute(args, name) {
-  if (interrupted) throw new Error('Akis kullanici tarafindan durduruldu.');
+  if (interrupted) throw new Error(err.flowInterrupted);
   return new Promise((accept, reject) => {
     child = spawn(process.execPath, [resolve(root, 'scripts/qms.mjs'), ...args],
       { cwd: root, env: childEnvironment(args[0], lastReport?.address), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
@@ -42,18 +43,18 @@ async function execute(args, name) {
       }
     });
     child.stderr.on('data', data => { stderr += data; });
-    child.once('error', () => { clearInterval(heartbeat); reject(new Error('Alt komut baslatilamadi.')); });
+    child.once('error', () => { clearInterval(heartbeat); reject(new Error(err.childStart)); });
     child.once('close', code => {
       clearInterval(heartbeat);
       child = null;
       let results;
       try { results = parseOutput(stdout); } catch { results = []; }
       if (code !== 0 || interrupted) {
-        const error = new Error(interrupted ? 'Akis durduruldu.' : (stderr.trim() || `${name} basarisiz.`));
+        const error = new Error(interrupted ? err.flowStopped : (stderr.trim() || err.actionFailed(name)));
         error.results = results;
         reject(error);
       } else if (parseError) { parseError.results = results; reject(parseError); }
-      else if (!results.length) reject(new Error('Komut sonuc verisi uretmedi.'));
+      else if (!results.length) reject(new Error(err.noCommandOutput));
       else accept(results);
     });
   });
@@ -71,11 +72,11 @@ try {
     'no-color': { type: 'boolean', default: false },
   } });
   if (values.help) {
-    console.log('npm run all  (tum adimlari zincire gonderir)\nnpm run all -- --dry-run  (on kontrol)\nSecenekler: --swap-amount 0.2 --liquidity-amount 0.1 --slippage-bps 100 --verbose --no-color');
+    console.log(log.runAllHelp);
   } else {
     mkdirSync(resolve(root, '.cache'), { recursive: true });
     try { lock = openSync(lockPath, 'wx'); }
-    catch { throw new Error('Baska bir toplu akis calisiyor veya onceki kilit kaldi: .cache/run-all.lock'); }
+    catch { throw new Error(err.runAllLock); }
     verbose = values.verbose;
     mkdirSync(resolve(root, 'reports'), { recursive: true });
     logReady = true;
@@ -97,7 +98,7 @@ try {
 } catch (error) {
   if (lastReport?.status === 'failed') logger.finish(lastReport, resolve(root, reportPath), logFile);
   else logger.failure(error);
-  if (logReady) logger.note('Durum: reports/run-latest.json. Gönderilen hash varsa yeniden başlatmadan receipt kontrol edin.');
+  if (logReady) logger.note(log.runAllStatusNote);
   process.exitCode = 1;
 } finally {
   if (lock !== undefined) { closeSync(lock); unlinkSync(lockPath); }

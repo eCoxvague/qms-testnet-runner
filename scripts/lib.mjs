@@ -6,6 +6,7 @@ import { JsonRpcProvider, FetchRequest, Wallet, Transaction, getAddress, keccak2
 import { writeAtomic } from './storage.mjs';
 import { createJournal } from './tx-journal.mjs';
 import { taskContext, assertTaskWindow } from './task-context.mjs';
+import { err, safe as safeMsg } from './messages.mjs';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
 export const config = JSON.parse(readFileSync(resolve(root, 'config/qms-testnet.json'), 'utf8'));
@@ -18,7 +19,7 @@ export function output(data) {
   console.log(JSON.stringify(data, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2));
 }
 export function assertTestnet(chainId) {
-  if (BigInt(chainId) !== 19480n) throw new Error('Chain ID 19480 degil; islem durduruldu.');
+  if (BigInt(chainId) !== 19480n) throw new Error(err.chainId);
 }
 export async function connect() {
   const request = new FetchRequest(config.rpcUrl);
@@ -39,27 +40,27 @@ export function loadWallet(provider) {
       // stdout is captured in memory; never inherited by the terminal or logged.
       key = execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
         resolve(root, 'scripts/read-key.ps1')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000 }).trim();
-    } catch { throw new Error('Sifreli anahtar okunamadi. npm run key:import calistirin.'); }
+    } catch { throw new Error(err.encryptedKeyRead); }
   }
   if (!key && existsSync(resolve(root, '.secrets/qms-keystore.json'))) {
-    if (!password) throw new Error('Keystore kilitli. npm start ile gizli parola girisi yapin.');
+    if (!password) throw new Error(err.keystoreLocked);
     try {
       const wallet = Wallet.fromEncryptedJsonSync(readFileSync(resolve(root, '.secrets/qms-keystore.json'), 'utf8'), password);
       return assertWallet(provider ? wallet.connect(provider) : wallet);
-    } catch { throw new Error('Keystore acilamadi; parola veya dosya gecersiz.'); }
+    } catch { throw new Error(err.keystoreOpen); }
     finally { password = undefined; }
   }
-  if (!key) throw new Error('Anahtar yok. npm run key:import ile yerelde yukleyin.');
+  if (!key) throw new Error(err.noKey);
   key = key.trim().replace(/^0x/, '');
-  if (!/^[a-fA-F0-9]{64}$/.test(key)) throw new Error('Private key formati gecersiz.');
+  if (!/^[a-fA-F0-9]{64}$/.test(key)) throw new Error(err.keyFormat);
   try { return assertWallet(new Wallet('0x' + key, provider)); }
-  catch { throw new Error('Private key gecersiz.'); }
+  catch { throw new Error(err.keyInvalid); }
   finally { key = undefined; }
 }
 function assertWallet(wallet) {
   const expected = process.env.QMS_EXPECTED_ADDRESS;
   if (expected && wallet.address.toLowerCase() !== expected.toLowerCase())
-    throw new Error('Akis sirasinda kayitli cuzdan degisti; islem durduruldu.');
+    throw new Error(err.walletChanged);
   return wallet;
 }
 export function childEnvironment(command, expectedAddress) {
@@ -71,34 +72,34 @@ export function childEnvironment(command, expectedAddress) {
   return env;
 }
 export function amountQms(value) {
-  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/.test(value)) throw new Error('QMS miktari pozitif ondalik olmali.');
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/.test(value)) throw new Error(err.qmsAmount);
   const amount = parseEther(value);
   if (amount <= 0n || amount > parseEther(config.maxActionQms))
-    throw new Error(`Test miktari 0 ile ${config.maxActionQms} QMS arasinda olmali.`);
+    throw new Error(err.qmsRange(config.maxActionQms));
   return amount;
 }
 export function minimum(amount, bps) {
-  if (!Number.isInteger(bps) || bps < 1 || bps > 500) throw new Error('Slippage 1-500 bps olmali.');
+  if (!Number.isInteger(bps) || bps < 1 || bps > 500) throw new Error(err.slippage);
   const value = amount * BigInt(10000 - bps) / 10000n;
-  if (value <= 0n) throw new Error('Minimum cikti sifir; miktar cok kucuk.');
+  if (value <= 0n) throw new Error(err.minOutZero);
   return value;
 }
 export function checkBudget(balance, value, gasLimit, gasPrice) {
   const maxFee = gasLimit * gasPrice;
-  if (maxFee > parseEther(config.maxGasQms)) throw new Error('Gas ust siniri 0.05 QMS asiliyor.');
+  if (maxFee > parseEther(config.maxGasQms)) throw new Error(err.gasCap);
   if (balance < value + maxFee + parseEther(config.reserveQms))
-    throw new Error('Bakiye yetersiz: islem + gas ve 0.1 QMS rezerv gerekiyor. Faucet kullanin.');
+    throw new Error(err.balanceLow);
   return maxFee;
 }
 export function safeError(error) {
   // Ethers error objects can contain signed transactions or request bodies.
   // Only a short message is allowed to reach stdout/stderr.
-  const message = error?.shortMessage ?? error?.message ?? 'Bilinmeyen hata';
+  const message = error?.shortMessage ?? error?.message ?? err.unknown;
   return String(message)
     .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
     .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
     .replace(/[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g, ' ')
-    .replace(/(?:0x)?[a-fA-F0-9]{64,}/g, '[hex gizlendi]').slice(0, 450);
+    .replace(/(?:0x)?[a-fA-F0-9]{64,}/g, safeMsg.hexHidden).slice(0, 450);
 }
 export async function jsonFetch(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(25000) });
@@ -112,16 +113,16 @@ export async function jsonFetch(url) {
 export async function submit(provider, wallet, tx, label, broadcast, journalRoot = root, emit = output) {
   const task = taskContext();
   assertTaskWindow(task);
-  if (task && task.address.toLowerCase() !== wallet.address.toLowerCase()) throw new Error('Streak cuzdan baglami eslesmiyor.');
+  if (task && task.address.toLowerCase() !== wallet.address.toLowerCase()) throw new Error(err.streakWalletCtx);
   if ((tx.value ?? 0n) < 0n || (tx.value ?? 0n) > parseEther(config.maxActionQms))
-    throw new Error('Islem native miktar sinirini asiyor.');
+    throw new Error(err.nativeCap);
   assertTestnet(await provider.send('eth_chainId', []));
   const transaction = { ...tx, from: wallet.address };
   const estimated = await provider.estimateGas(transaction);
   const gasLimit = (estimated * 120n + 99n) / 100n;
   const fees = await provider.getFeeData();
   if (fees.maxFeePerGas == null || fees.maxPriorityFeePerGas == null)
-    throw new Error('EIP-1559 gas verisi alinamadi.');
+    throw new Error(err.eip1559);
   const maxFee = checkBudget(await provider.getBalance(wallet.address), tx.value ?? 0n, gasLimit, fees.maxFeePerGas);
   emit({ action: label, mode: broadcast ? 'broadcast' : 'simulation', from: wallet.address,
     to: tx.to ?? 'contract creation', valueQms: formatEther(tx.value ?? 0n), gasLimit,
@@ -135,7 +136,7 @@ export async function submit(provider, wallet, tx, label, broadcast, journalRoot
     await journal.checkOperation(provider, task, label);
     if (task) {
       const head = await provider.getBlock('latest');
-      if (!head) throw new Error('Streak icin son blok zamani okunamadi.');
+      if (!head) throw new Error(err.streakBlockTime);
       assertTaskWindow(task, head.timestamp * 1000);
     }
     assertTestnet(await provider.send('eth_chainId', []));
@@ -148,7 +149,7 @@ export async function submit(provider, wallet, tx, label, broadcast, journalRoot
     if (decoded.type !== 2 || decoded.from?.toLowerCase() !== wallet.address.toLowerCase()
         || decoded.to !== (tx.to ? getAddress(tx.to) : null) || decoded.value !== (tx.value ?? 0n)
         || decoded.gasLimit !== gasLimit || decoded.maxFeePerGas !== fees.maxFeePerGas)
-      throw new Error('Imzalanan islem beklenen cuzdan/hedef/miktar/gas ile eslesmiyor; gonderilmedi.');
+      throw new Error(err.signedMismatch);
     const hash = keccak256(raw);
     const record = { action: label, chainId: config.chainId, hash, nonce: decoded.nonce,
       from: wallet.address, to: decoded.to, preparedAt: new Date().toISOString(), status: 'prepared',
@@ -163,7 +164,7 @@ export async function submit(provider, wallet, tx, label, broadcast, journalRoot
     } catch {
       journal.write({ ...record, status: 'broadcast-unknown' });
       emit({ hash, explorer: record.explorer, status: 'broadcast-unknown' });
-      throw new Error('RPC gonderim sonucu belirsiz. Hash kaydedildi; yeni islem gondermeden explorer kontrol edin.');
+      throw new Error(err.rpcUnknown);
     } finally { raw = undefined; }
     journal.write({ ...record, status: 'submitted', submittedAt: new Date().toISOString() });
     emit({ hash, explorer: record.explorer, status: 'submitted' });
@@ -172,16 +173,16 @@ export async function submit(provider, wallet, tx, label, broadcast, journalRoot
     try { receipt = await provider.waitForTransaction(hash, config.confirmations, config.receiptTimeoutMs); }
     catch {
       journal.write({ ...record, status: 'receipt-timeout' });
-      throw new Error('Receipt bekleme sonucu belirsiz. Hash kayitli; tekrar gondermeden explorer kontrol edin.');
+      throw new Error(err.receiptUnknown);
     }
     if (!receipt) {
       journal.write({ ...record, status: 'receipt-timeout' });
-      throw new Error('Receipt bulunamadi; islem hash kaydini kontrol edin.');
+      throw new Error(err.receiptMissing);
     }
     const status = receipt.status === 1 ? 'confirmed' : 'reverted';
     journal.write({ ...record, status, blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed, feeQms: formatEther(receipt.fee), contractAddress: receipt.contractAddress });
-    if (status !== 'confirmed') throw new Error('Islem zincirde revert etti; receipt kaydedildi.');
+    if (status !== 'confirmed') throw new Error(err.reverted);
     emit({ status, blockNumber: receipt.blockNumber, confirmations: config.confirmations,
       feeQms: formatEther(receipt.fee) });
     return receipt;

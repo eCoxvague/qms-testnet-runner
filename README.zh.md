@@ -6,6 +6,8 @@
 
 基于 [QMS 官方入门指南](https://qms.finance/news/welcome-to-qms-testnet) 的社区工具，独立维护，非 QMS 或 QWAP 官方产品。
 
+**终端输出为简体中文**（步骤日志、错误提示、密钥导入与 Streak 状态等；文案集中在 `scripts/messages.mjs`）。
+
 ## 10 月 19 日 Testnet Streak
 
 专用「每日 1 次 swap + 1 次 LP」模式：按 UTC 日界、收据/事件校验、防重复发送、中断后可续跑，以及本地 6/7 天进度估算。复用当前钱包，不部署新合约。
@@ -95,7 +97,7 @@ npm run key:import
 
 ## 日志与恢复
 
-输出包含编号步骤、交易链接、确认数、耗时与余额/gas 摘要。时间显示为 `Europe/Istanbul`。以下路径均被 Git 忽略：
+输出包含编号步骤、交易链接、确认数、耗时与余额/gas 摘要。终端日志时间显示为 `Asia/Shanghai`。以下路径均被 Git 忽略：
 
 - `.secrets/`：加密钱包文件
 - `reports/run-latest.json`：最新工作流状态

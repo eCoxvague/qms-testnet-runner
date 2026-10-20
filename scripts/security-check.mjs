@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { log } from './messages.mjs';
 
 const forbidden = /^(?:\.secrets(?:\/|$)|\.env(?:\.|$)|reports\/|deployments\/|artifacts\/|node_modules\/|\.cache\/|docs\/test-run-|docs\/discord-feedback\.md)/i;
 export function inspectContent(file, content) {
@@ -33,9 +34,9 @@ export function checkRepository() {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const result = checkRepository();
-    console.log(`Security scan: ${result.commits} commits, ${result.fileVersions} file versions, ${result.findings.length} findings.`);
+    console.log(log.securityScan(result.commits, result.fileVersions, result.findings.length));
     // Never print matched credential content.
     for (const finding of result.findings) console.error(`${finding.rule}: ${finding.file} (${finding.revision})`);
     if (result.findings.length) process.exitCode = 1;
-  } catch { console.error('Repository security scan could not complete.'); process.exitCode = 1; }
+  } catch { console.error(log.securityScanFailed); process.exitCode = 1; }
 }

@@ -6,20 +6,9 @@ import solc from 'solc';
 import { config, root, save, output, connect, loadWallet, amountQms, minimum, safeError, jsonFetch, submit } from './lib.mjs';
 import { tokenAbi, routerAbi, factoryAbi, pairAbi } from './abis.mjs';
 import { verifyQubo } from './qubo.mjs';
+import { err, qmsUsage, log } from './messages.mjs';
 
-const usage = `QMS Testnet (19480)
-  npm run status
-  npm run key:import                       Yerelde gizli anahtar girisi
-  npm run qms -- wallet [--address 0x...]
-  npm run compile
-  npm run qms -- deploy [--broadcast]
-  npm run qms -- increment [--contract 0x...] [--broadcast]
-  npm run qms -- quote --amount 0.1
-  npm run qms -- swap --amount 0.1 [--slippage-bps 100] [--broadcast]
-  npm run qms -- liquidity --amount 0.1 [--slippage-bps 100] [--broadcast]
-  npm run qms -- block [--number 57173] [--download]
-Islemler --broadcast olmadan zincire gonderilmez. Varsayilan miktar: 0.1 QMS.
-Liquditiy native QMS'yi router uzerinden WQMS'ye sarar; USDC bakiyesi gerekir.`;
+const usage = qmsUsage;
 const c = config.contracts;
 const equal = (a, b) => a.toLowerCase() === b.toLowerCase();
 let provider;
@@ -43,7 +32,7 @@ function compile() {
 
 async function dex() {
   await Promise.all(Object.entries(c).map(async ([name, address]) => {
-    if (await provider.getCode(address) === '0x') throw new Error(`${name} adresinde kontrat yok.`);
+    if (await provider.getCode(address) === '0x') throw new Error(err.contractMissing(name));
   }));
   const router = new Contract(c.router, routerAbi, provider);
   const factory = new Contract(c.factory, factoryAbi, provider);
@@ -55,9 +44,9 @@ async function dex() {
   ]);
   if (!equal(rf, c.factory) || !equal(rw, c.wqms) || !equal(fp, c.wqmsUsdcPair) || !equal(pf, c.factory)
       || ![token0, token1].some(t => equal(t, c.wqms)) || ![token0, token1].some(t => equal(t, c.usdc)))
-    throw new Error('QWAP router/factory/token/pool iliskisi dogrulanamadi.');
-  if (symbol !== 'USDC' || Number(decimals) > 18) throw new Error('USDC metadatasi beklenen degerde degil.');
-  if (reserves[0] === 0n || reserves[1] === 0n) throw new Error('Havuzda likidite yok.');
+    throw new Error(err.qwapRelations);
+  if (symbol !== 'USDC' || Number(decimals) > 18) throw new Error(err.usdcMeta);
+  if (reserves[0] === 0n || reserves[1] === 0n) throw new Error(err.poolEmpty);
   return { router, usdc, pair, decimals: Number(decimals), token0, reserves };
 }
 
@@ -74,7 +63,7 @@ async function quote(amount, bps, data) {
 async function deadline() {
   const block = await provider.getBlock('latest');
   if (!block || Math.abs(Date.now() / 1000 - block.timestamp) > 600)
-    throw new Error('Son blok zamani guncel degil. Ag durumunu kontrol edin.');
+    throw new Error(err.blockStale);
   return block.timestamp + 600;
 }
 
@@ -82,7 +71,7 @@ async function blockReport(number, download) {
   // RPC can advance before Blockscout indexes the new height.
   const indexed = number == null ? await jsonFetch(`${config.explorerUrl}/api/v2/blocks`) : null;
   const height = number == null ? Number(indexed?.items?.[0]?.height) : Number(number);
-  if (!Number.isSafeInteger(height) || height < 1) throw new Error('Blok numarasi pozitif tamsayi olmali.');
+  if (!Number.isSafeInteger(height) || height < 1) throw new Error(err.blockNumber);
   let block;
   for (let attempt = 0; attempt < 5; attempt++) {
     try { block = await jsonFetch(`${config.explorerUrl}/api/v2/blocks/${height}`); break; }
@@ -92,13 +81,13 @@ async function blockReport(number, download) {
     }
   }
   const execution = await provider.getBlock(height);
-  if (!execution || !equal(execution.hash, block.hash)) throw new Error('RPC ve explorer blok hash uyusmuyor.');
+  if (!execution || !equal(execution.hash, block.hash)) throw new Error(err.blockHashMismatch);
   let qubo = null;
   let quboError = null;
   try {
     qubo = await jsonFetch(`${config.explorerUrl}/v1/blocks/${height}/qubo`);
     if (Number(qubo.block_number) !== height || !equal(qubo.execution_block_hash, execution.hash))
-      throw new Error('QUBO metadata farkli bloka ait.');
+      throw new Error(err.quboWrongBlock);
   } catch (e) { quboError = safeError(e); qubo = null; }
   const instanceUrl = `${config.explorerUrl}/v1/blocks/${height}/qubo/instance`;
   const report = { capturedAt: new Date().toISOString(), chainId: config.chainId,
@@ -106,18 +95,18 @@ async function blockReport(number, download) {
     instanceUrl: qubo ? instanceUrl : null,
     explanation: qubo ? 'Bu blokta QUBO optimizasyon problemi cozuldu. Hash, boyut, ikili cozum ve objective degeri kayitli. Metadata gercek dunya uygulamasini belirtmiyor.' : 'QUBO verisi alinamadi; cozulmus problem hakkinda sonuc cikarilmadi.' };
   if (download) {
-    if (!qubo) throw new Error('QUBO metadatasi yok; instance indirilmedi.');
+    if (!qubo) throw new Error(err.quboMissing);
     const res = await fetch(instanceUrl, { signal: AbortSignal.timeout(60000) });
-    if (!res.ok) throw new Error(`Instance HTTP ${res.status}`);
+    if (!res.ok) throw new Error(err.instanceHttp(res.status));
     const chunks = [];
     let size = 0;
     for await (const chunk of res.body) {
       size += chunk.length;
-      if (size > 32 * 1024 * 1024) throw new Error('Instance boyutu 32 MiB sinirini asti.');
+      if (size > 32 * 1024 * 1024) throw new Error(err.instanceSize);
       chunks.push(chunk);
     }
     const bytes = Buffer.concat(chunks);
-    if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) throw new Error('Instance gzip formatinda degil.');
+    if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) throw new Error(err.instanceGzip);
     report.objectiveVerification = verifyQubo(bytes, qubo);
     mkdirSync(resolve(root, 'reports'), { recursive: true });
     const file = resolve(root, `reports/block-${height}.mtx.gz`);
@@ -141,9 +130,9 @@ async function main() {
   } });
   const command = positionals[0] ?? 'help';
   if (values.help || command === 'help') { console.log(usage); return; }
-  if (positionals.length !== 1) throw new Error('Tek bir komut girin.');
+  if (positionals.length !== 1) throw new Error(err.oneCommand);
   if (!['status', 'wallet', 'compile', 'deploy', 'increment', 'quote', 'swap', 'liquidity', 'block'].includes(command))
-    throw new Error('Bilinmeyen komut; npm run qms -- help kullanin.');
+    throw new Error(err.unknownCommand);
   if (command === 'compile') {
     const artifact = compile(); output({ compiler: artifact.compiler, evmVersion: artifact.evmVersion,
       bytecodeBytes: (artifact.bytecode.length - 2) / 2 }); return;
@@ -188,27 +177,27 @@ async function main() {
       save(`deployments/${receipt.contractAddress}.json`, deployment);
       save('deployments/latest.json', deployment);
       const code = await provider.getCode(receipt.contractAddress);
-      if (code.toLowerCase() !== artifact.deployedBytecode.toLowerCase()) throw new Error('Deploy bytecode dogrulanamadi.');
+      if (code.toLowerCase() !== artifact.deployedBytecode.toLowerCase()) throw new Error(err.deployBytecode);
       const counter = new Contract(receipt.contractAddress, artifact.abi, provider);
-      if (await counter.count() !== 0n) throw new Error('Baslangic counter degeri sifir degil.');
+      if (await counter.count() !== 0n) throw new Error(err.counterNotZero);
       output({ ...deployment, bytecodeVerified: true, count: '0' });
     } return;
   }
   if (command === 'increment') {
     const artifactPath = resolve(root, 'artifacts/QmsCounter.json');
-    if (!existsSync(artifactPath)) throw new Error('Once compile ve deploy calistirin.');
+    if (!existsSync(artifactPath)) throw new Error(err.compileFirst);
     const artifact = JSON.parse(readFileSync(artifactPath, 'utf8'));
     let address = values.contract;
     if (!address) {
       const deploymentFile = resolve(root, 'deployments/latest.json');
-      if (!existsSync(deploymentFile)) throw new Error('Deploy kaydi yok; --contract adres verin.');
+      if (!existsSync(deploymentFile)) throw new Error(err.noDeployRecord);
       const deployment = JSON.parse(readFileSync(deploymentFile, 'utf8'));
-      if (deployment.chainId !== config.chainId) throw new Error('Deploy kaydi farkli aga ait.');
+      if (deployment.chainId !== config.chainId) throw new Error(err.deployWrongChain);
       address = deployment.address;
     }
     address = getAddress(address);
     if ((await provider.getCode(address)).toLowerCase() !== artifact.deployedBytecode.toLowerCase())
-      throw new Error('Adresteki bytecode QmsCounter ile eslesmiyor.');
+      throw new Error(err.bytecodeMismatch);
     const counter = new Contract(address, artifact.abi, wallet);
     const before = await counter.count();
     const receipt = await submit(provider, wallet, await counter.increment.populateTransaction(), 'increment QmsCounter', values.broadcast);
@@ -216,7 +205,7 @@ async function main() {
       const after = await counter.count();
       const events = receipt.logs.filter(l => equal(l.address, address)).map(l => counter.interface.parseLog(l));
       if (after <= before || !events.some(e => e?.name === 'Incremented' && equal(e.args.caller, wallet.address)))
-        throw new Error('Counter artisi veya event dogrulanamadi.');
+        throw new Error(err.counterEvent);
       output({ address, before, after, eventVerified: true });
     } else output({ address, count: before, simulated: true });
     return;
@@ -240,7 +229,7 @@ async function main() {
     const tokenDesired = amount * tokenReserve / nativeReserve;
     const tokenMin = minimum(tokenDesired, bps);
     const nativeMin = minimum(amount, bps);
-    if (await data.usdc.balanceOf(wallet.address) < tokenDesired) throw new Error('USDC bakiyesi likidite icin yetersiz; once swap yapin.');
+    if (await data.usdc.balanceOf(wallet.address) < tokenDesired) throw new Error(err.usdcForLp);
     const allowance = await data.usdc.allowance(wallet.address, c.router);
     output({ action: 'add WQMS/USDC liquidity', qms: formatEther(amount),
       usdcDesired: formatUnits(tokenDesired, data.decimals), minimumUsdc: formatUnits(tokenMin, data.decimals),
@@ -258,12 +247,12 @@ async function main() {
     const receipt = await submit(provider, wallet, tx, 'QWAP add WQMS/USDC liquidity', values.broadcast);
     if (receipt) {
       const lpAfter = await data.pair.balanceOf(wallet.address);
-      if (lpAfter <= lpBefore) throw new Error('LP bakiyesi artmadi.');
+      if (lpAfter <= lpBefore) throw new Error(err.lpBalance);
       output({ lpBefore, lpAfter, mintedLp: lpAfter - lpBefore, pair: c.wqmsUsdcPair });
     }
   }
 }
 
 try { await main(); }
-catch (error) { console.error('Hata: ' + safeError(error)); process.exitCode = 1; }
+catch (error) { console.error(log.errorPrefix + safeError(error)); process.exitCode = 1; }
 finally { provider?.destroy(); }

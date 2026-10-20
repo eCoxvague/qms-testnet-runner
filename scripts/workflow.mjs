@@ -1,5 +1,6 @@
 import { parseEther, parseUnits, formatEther } from 'ethers';
 import { config, amountQms, minimum, safeError } from './lib.mjs';
+import { err, skipReason, step as steps } from './messages.mjs';
 
 // Each existing CLI action verifies its own receipt and state changes before returning.
 // Keep actions sequential: a failed action must never allow the next broadcast.
@@ -37,72 +38,72 @@ export async function runWorkflow({ execute, checkpoint, broadcast = false,
   }
   const last = results => results.at(-1);
   const ensureConfirmed = results => {
-    if (!results.some(r => r.status === 'confirmed')) throw new Error('Onayli receipt alinamadi.');
+    if (!results.some(r => r.status === 'confirmed')) throw new Error(err.noConfirmedReceipt);
   };
   const modeFlags = broadcast ? ['--broadcast'] : [];
   try {
-    await step('Ag ve QWAP kontrolu', ['status'], results => {
+    await step(steps.networkQwap, ['status'], results => {
       const status = results.find(r => r.network);
       if (status?.chainId !== config.chainId || status.dexVerified !== true)
-        throw new Error('Ag veya QWAP dogrulanamadi.');
+        throw new Error(err.networkQwap);
     });
     // Allow for deploy, increment, swap, approval and liquidity, each at its configured cap.
     const required = swapWei + liquidityWei + parseEther(config.reserveQms) + 5n * parseEther(config.maxGasQms);
-    const before = last(await step('Cuzdan ve toplam butce', ['wallet'], results => {
+    const before = last(await step(steps.walletBudget, ['wallet'], results => {
       if (parseEther(last(results).qms) < required)
-        throw new Error(`Tum akis icin en az ${formatEther(required)} QMS gerekiyor (gas rezervi dahil).`);
+        throw new Error(err.workflowMinQms(formatEther(required)));
     }));
     report.address = before.address;
     report.before = before;
-    const deploy = await step('Kontrat deploy', ['deploy', ...modeFlags], results => {
+    const deploy = await step(steps.deploy, ['deploy', ...modeFlags], results => {
       if (broadcast) {
         ensureConfirmed(results);
         const deployed = last(results);
         if (!deployed.address || deployed.bytecodeVerified !== true || deployed.count !== '0')
-          throw new Error('Deploy sonrasi bytecode veya count dogrulanamadi.');
+          throw new Error(err.deployVerify);
       }
     });
     const deployment = broadcast ? last(deploy) : null;
     if (broadcast) {
       report.contract = deployment.address;
-      await step('Sayac artirma ve event kontrolu', ['increment', '--contract', deployment.address, '--broadcast'], results => {
+      await step(steps.incrementEvent, ['increment', '--contract', deployment.address, '--broadcast'], results => {
         ensureConfirmed(results);
         const increment = last(results);
         if (increment.eventVerified !== true || increment.before !== '0' || increment.after !== '1')
-          throw new Error('Yeni kontratin sayaci 0 -> 1 olarak dogrulanamadi.');
+          throw new Error(err.incrementVerify);
       });
     } else {
-      report.steps.push({ name: 'Sayac artirma', status: 'skipped',
-        reason: 'Ön kontrolde yeni kontrat deploy edilmediği için sayaç artırma atlandı.' });
+      report.steps.push({ name: steps.increment, status: 'skipped',
+        reason: skipReason.increment });
       await persist();
     }
-    await step('QMS -> USDC swap', ['swap', '--amount', swapAmount, '--slippage-bps', String(slippageBps), ...modeFlags], results => {
+    await step(steps.swap, ['swap', '--amount', swapAmount, '--slippage-bps', String(slippageBps), ...modeFlags], results => {
       if (broadcast) {
         ensureConfirmed(results);
         const swap = last(results);
         if (parseUnits(swap.usdcAfter, 18) <= parseUnits(swap.usdcBefore, 18))
-          throw new Error('Swap sonrasi USDC bakiyesi artmadi.');
+          throw new Error(err.swapUsdc);
       }
     });
     if (broadcast) {
-      await step('Approval ve WQMS/USDC likidite', ['liquidity', '--amount', liquidityAmount,
+      await step(steps.liquidityFull, ['liquidity', '--amount', liquidityAmount,
         '--slippage-bps', String(slippageBps), '--broadcast'], results => {
         ensureConfirmed(results);
         const lp = last(results);
-        if (BigInt(lp.mintedLp ?? 0) <= 0n) throw new Error('Likidite sonrasi LP artisi dogrulanamadi.');
+        if (BigInt(lp.mintedLp ?? 0) <= 0n) throw new Error(err.lpMint);
       });
     } else {
       // A dry swap does not create USDC. Do not claim a dependent deposit was simulated.
-      report.steps.push({ name: 'Approval ve likidite', status: 'skipped',
-        reason: 'Ön kontrolde swap bakiyeyi değiştirmediği için likidite adımı atlandı.' });
+      report.steps.push({ name: steps.liquidityShort, status: 'skipped',
+        reason: skipReason.liquidity });
       await persist();
     }
-    report.after = last(await step('Son bakiye kontrolu', ['wallet']));
+    report.after = last(await step(steps.finalWallet, ['wallet']));
     if (report.after.address?.toLowerCase() !== report.address?.toLowerCase())
-      throw new Error('Akis sirasinda cuzdan adresi degisti.');
+      throw new Error(err.walletSwitch);
     const blockArgs = deployment ? ['--number', String(deployment.blockNumber)] : [];
-    await step('Blok ve QUBO cozumu kontrolu', ['block', ...blockArgs, '--download'], results => {
-      if (last(results)?.objectiveVerification?.verified !== true) throw new Error('QUBO objective dogrulanamadi.');
+    await step(steps.blockQubo, ['block', ...blockArgs, '--download'], results => {
+      if (last(results)?.objectiveVerification?.verified !== true) throw new Error(err.quboObjective);
     });
     report.status = broadcast ? 'completed' : 'preflight-passed';
     report.finishedAt = new Date().toISOString();
@@ -133,7 +134,7 @@ export function createOutputParser(onValue) {
       for (const c of chunk) {
         if (depth === 0) {
           if (/\s/.test(c)) continue;
-          if (c !== '{') throw new Error('Beklenmeyen CLI ciktisi.');
+          if (c !== '{') throw new Error(err.unexpectedCli);
           frame = c; depth = 1; continue;
         }
         frame += c;
@@ -153,6 +154,6 @@ export function createOutputParser(onValue) {
         }
       }
     },
-    finish() { if (depth !== 0 || count === 0) throw new Error('CLI JSON ciktisi eksik.'); },
+    finish() { if (depth !== 0 || count === 0) throw new Error(err.cliJsonIncomplete); },
   };
 }

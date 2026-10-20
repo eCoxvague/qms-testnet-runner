@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, fsyncSync, mkdirS
 import { resolve } from 'node:path';
 import { getAddress, formatEther } from 'ethers';
 import { writeAtomic } from './storage.mjs';
+import { err } from './messages.mjs';
 
 const unresolved = new Set(['prepared', 'pending', 'submitted', 'broadcast-unknown', 'receipt-timeout']);
 export function createJournal(projectRoot, chainId, address) {
@@ -10,7 +11,7 @@ export function createJournal(projectRoot, chainId, address) {
   const cache = resolve(projectRoot, '.cache');
   const lockFile = resolve(cache, `tx-${chainId}-${wallet.toLowerCase()}.lock`);
   function write(record) {
-    if (!/^0x[\da-f]{64}$/i.test(record.hash)) throw new Error('Islem hash formati gecersiz.');
+    if (!/^0x[\da-f]{64}$/i.test(record.hash)) throw new Error(err.txHashFormat);
     writeAtomic(resolve(folder, `tx-${record.hash}.json`), JSON.stringify(record, (_, v) =>
       typeof v === 'bigint' ? v.toString() : v, 2) + '\n');
   }
@@ -20,7 +21,7 @@ export function createJournal(projectRoot, chainId, address) {
       mkdirSync(cache, { recursive: true });
       let descriptor;
       try { descriptor = openSync(lockFile, 'wx', 0o600); }
-      catch { throw new Error('Bu cuzdan icin baska islem calisiyor veya onceki kilit kaldi. Kayitlari kontrol edin.'); }
+      catch { throw new Error(err.txLock); }
       try {
         writeFileSync(descriptor, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
         fsyncSync(descriptor);
@@ -32,12 +33,12 @@ export function createJournal(projectRoot, chainId, address) {
       for (const name of readdirSync(folder).filter(name => /^tx-0x[\da-f]{64}\.json$/i.test(name))) {
         let record;
         try { record = JSON.parse(readFileSync(resolve(folder, name), 'utf8')); }
-        catch { throw new Error('Bir islem kaydi okunamiyor; yeni islem gonderilmedi.'); }
+        catch { throw new Error(err.txRecordRead); }
         if (record.chainId !== chainId || record.from?.toLowerCase() !== wallet.toLowerCase() || !unresolved.has(record.status)) continue;
         const receipt = await provider.getTransactionReceipt(record.hash);
         const head = receipt ? await provider.getBlockNumber() : 0;
         if (!receipt || head - receipt.blockNumber + 1 < confirmations)
-          throw new Error('Bu cuzdanda sonucu belirsiz veya onaysiz bir islem var; once reports/tx-*.json kaydini explorer ile kontrol edin.');
+          throw new Error(err.txUnresolved);
         write({ ...record, status: receipt.status === 1 ? 'confirmed' : 'reverted',
           blockNumber: receipt.blockNumber, gasUsed: receipt.gasUsed,
           feeQms: formatEther(receipt.fee), contractAddress: receipt.contractAddress });
@@ -52,13 +53,13 @@ export function createJournal(projectRoot, chainId, address) {
             || !record.operationId?.startsWith(context.group) || record.action !== action
             || ['not-broadcast', 'reverted'].includes(record.status)) continue;
         const receipt = await provider.getTransactionReceipt(record.hash);
-        if (!receipt) throw new Error('Onceki streak islemi belirsiz; tekrar gonderilmedi.');
+        if (!receipt) throw new Error(err.streakPrevUnknown);
         if (receipt.status !== 1) continue;
         const block = await provider.getBlock(receipt.blockNumber);
-        if (!block) throw new Error('Onceki streak isleminin blok zamani okunamadi.');
+        if (!block) throw new Error(err.streakPrevBlock);
         const time = block.timestamp * 1000;
         if (time >= context.start && time < context.end)
-          throw new Error('Bu gorev gununde bu streak islemi zaten basarili; tekrar gonderilmedi.');
+          throw new Error(err.streakDupDay);
       }
     },
   };

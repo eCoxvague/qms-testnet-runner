@@ -18,7 +18,7 @@ test('streamed objects render only when complete, even when escapes and braces c
   assert.deepEqual(values, [first, second]);
 });
 
-test('human logs contain Istanbul timestamps and public tx links, but ignore unknown secret fields', () => {
+test('human logs contain Shanghai timestamps and public tx links, but ignore unknown secret fields', () => {
   const terminal = [], file = [];
   const logger = createLogger({ color: true, write: line => terminal.push(line), record: line => file.push(line),
     now: () => new Date('2026-10-06T10:00:00Z') });
@@ -26,9 +26,9 @@ test('human logs contain Istanbul timestamps and public tx links, but ignore unk
   const hash = '0x' + 'bc'.repeat(32);
   logger.result({ hash, explorer: `https://testnet.qmsscan.io/tx/${hash}`, privateKey: secret });
   logger.result({ status: 'confirmed', blockNumber: 123, confirmations: 2, feeQms: '0.0001' });
-  assert.ok(file.some(line => line.startsWith('[13:00:00]')));
+  assert.ok(file.some(line => line.startsWith('[18:00:00]')));
   assert.ok(file.some(line => line.includes(`/tx/${hash}`)));
-  assert.ok(file.some(line => line.includes('Onaylandı')));
+  assert.ok(file.some(line => line.includes('已确认')));
   assert.ok(file.every(line => !line.includes('\x1b')));
   assert.ok(terminal.some(line => line.includes('\x1b')));
   assert.ok(!file.join('\n').includes(secret));
@@ -44,10 +44,10 @@ test('failure output redacts error payloads and does not display a success banne
     steps: [{ status: 'failed', results: [{ status: 'confirmed', feeQms: '0.0001' }] }] }, 'report.json', 'run.log');
   const text = lines.join('\n');
   assert.ok(!text.includes(secret));
-  assert.ok(text.includes('AKIŞ DURDU'));
-  assert.ok(text.includes('1 onaylı'));
-  assert.ok(text.includes('1 başarısız'));
-  assert.ok(!text.includes('TÜM TESTLER TAMAMLANDI'));
+  assert.ok(text.includes('流程已停止'));
+  assert.ok(text.includes('1 笔已确认'));
+  assert.ok(text.includes('1 失败'));
+  assert.ok(!text.includes('全部测试已完成'));
 });
 
 test('block hashes are never mislabeled as submitted transactions during preflight', () => {
@@ -55,6 +55,6 @@ test('block hashes are never mislabeled as submitted transactions during preflig
   const logger = createLogger({ color: false, write: line => lines.push(line) });
   logger.result({ hash: '0x' + 'ab'.repeat(32), number: 12, explorer: 'https://testnet.qmsscan.io/block/12',
     qubo: { problemSize: 1024 }, objectiveVerification: { verified: true, computedObjective: '-100' } });
-  assert.ok(lines.some(line => line.includes('Blok #12')));
-  assert.ok(!lines.some(line => line.includes('Gönderildi')));
+  assert.ok(lines.some(line => line.includes('区块 #12')));
+  assert.ok(!lines.some(line => line.includes('已发送')));
 });

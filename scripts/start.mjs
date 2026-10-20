@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { config, root, loadWallet, safeError } from './lib.mjs';
+import { log } from './messages.mjs';
 import { hasStoredKey, importPrivateKey, keystoreFile, dpapiFile } from './key-manager.mjs';
 import { readSecret } from './secret-input.mjs';
 import { streakWindow } from './streak-calendar.mjs';
@@ -14,9 +15,9 @@ try {
   const keyless = streak && (args.includes('--status') || (!args.includes('--prepare') && streakWindow().phase !== 'active'));
   const needsWallet = !args.includes('--help') && !keyless;
   if (needsWallet) {
-    console.log('\nQMS Testnet Runner · local wallet setup\n');
+    console.log(log.startBanner);
     if (!hasStoredKey()) {
-      console.log('Use a separate TESTNET wallet. Private key input is hidden.');
+      console.log(log.testnetWalletHint);
       password = await importPrivateKey();
     }
     if (!process.env.QMS_PRIVATE_KEY && !(process.platform === 'win32' && existsSync(dpapiFile)) && existsSync(keystoreFile))
@@ -29,9 +30,9 @@ try {
     const suppliedKey = process.env.QMS_PRIVATE_KEY;
     try {
       const wallet = loadWallet();
-      console.log('Wallet: ' + wallet.address);
-      console.log('Free test QMS faucet: ' + config.faucetUrl);
-      console.log(`Workflow requires ${streak ? '0.55' : '0.65'} QMS with default amounts and gas reserves.\n`);
+      console.log(log.walletLine(wallet.address));
+      console.log(log.faucetLine(config.faucetUrl));
+      console.log(log.workflowNeed(streak ? '0.55' : '0.65'));
     } finally {
       delete process.env.QMS_KEYSTORE_PASSWORD;
       if (suppliedKey !== undefined) process.env.QMS_PRIVATE_KEY = suppliedKey;
@@ -51,5 +52,5 @@ try {
   });
   process.exitCode = code;
 } catch (error) {
-  console.error('Startup failed: ' + safeError(error)); process.exitCode = 1;
+  console.error(log.startupFailed + safeError(error)); process.exitCode = 1;
 } finally { password = undefined; delete process.env.QMS_KEYSTORE_PASSWORD; delete process.env.QMS_PRIVATE_KEY; }
