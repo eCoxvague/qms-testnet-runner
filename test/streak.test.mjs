@@ -111,7 +111,7 @@ test('preflight and invalid roles never broadcast actions', async () => {
   assert.deepEqual(f.commands.map(a => a[0]), ['quote']);
   assert.ok(f.commands.every(a => !a.includes('--broadcast')));
   f.commands = [];
-  await assert.rejects(runDailyStreak({ ...f.options, role: 'unsupported' }), /Rol/);
+  await assert.rejects(runDailyStreak({ ...f.options, role: 'unsupported' }), /角色/);
   assert.equal(f.commands.length, 0);
 });
 test('operation identifiers bind wallet, campaign, day and action; a closed day cannot send', () => {
@@ -119,8 +119,8 @@ test('operation identifiers bind wallet, campaign, day and action; a closed day 
   const env = { QMS_OPERATION_ID: operationId(address, 1, 'swap'), QMS_TASK_NOT_BEFORE: period.startsAt, QMS_TASK_NOT_AFTER: period.endsAt };
   const context = taskContext(env);
   assert.doesNotThrow(() => assertTaskWindow(context, Date.parse(period.startsAt)));
-  assert.throws(() => assertTaskWindow(context, Date.parse(period.endsAt)), /gunu disinda/);
-  assert.throws(() => taskContext({ ...env, QMS_TASK_NOT_BEFORE: '2026-10-18T13:00:00Z' }), /baglami/);
+  assert.throws(() => assertTaskWindow(context, Date.parse(period.endsAt)), /任务日/);
+  assert.throws(() => taskContext({ ...env, QMS_TASK_NOT_BEFORE: '2026-10-18T13:00:00Z' }), /上下文/);
 });
 test('approval receipts cannot satisfy LP; receipt sender, router calldata and token events are verified', async () => {
   const iface = new Interface(routerAbi), token = new Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);

@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Interface, ZeroAddress } from 'ethers';
 import { config } from './lib.mjs';
+import { err } from './messages.mjs';
 import { routerAbi } from './abis.mjs';
 
 const events = new Interface(['event Transfer(address indexed from,address indexed to,uint256 value)',
@@ -52,7 +53,7 @@ export function readStreakRecords(projectRoot, address, settings, state = {}) {
   if (existsSync(folder)) for (const name of readdirSync(folder).filter(name => /^tx-0x[\da-f]{64}\.json$/i.test(name))) {
     let record;
     try { record = JSON.parse(readFileSync(resolve(folder, name), 'utf8')); }
-    catch { throw new Error('Islem kaydi okunamadi; streak islemi gonderilmedi.'); }
+    catch { throw new Error(err.streakTxRead); }
     if (record.operationId?.startsWith(prefix) && record.chainId === config.chainId && eq(record.from, address))
       byHash.set(record.hash, record);
   }

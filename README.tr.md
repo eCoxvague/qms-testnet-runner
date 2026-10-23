@@ -1,6 +1,6 @@
 # QMS Testnet Runner — Türkçe
 
-[English README](README.md) · [GitHub](https://github.com/eCoxvague/qms-testnet-runner)
+[English README](README.md) · [中文说明](README.zh.md) · [GitHub](https://github.com/eCoxvague/qms-testnet-runner)
 
 Tek komutla QMS kontrat deploy, sayaç testi, QWAP swap/likidite ve QUBO çözüm değeri kontrolü.
 Bağımsız topluluk aracıdır; resmî QMS/QWAP ürünü değildir.

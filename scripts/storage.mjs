@@ -1,14 +1,15 @@
 import { existsSync, lstatSync, mkdirSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { err } from './messages.mjs';
 
 export function writeAtomic(file, content, { secret = false } = {}) {
   const directory = dirname(file);
   if (secret && existsSync(directory) && lstatSync(directory).isSymbolicLink())
-    throw new Error('Anahtar klasoru sembolik baglanti olamaz.');
+    throw new Error(err.secretDirSymlink);
   mkdirSync(directory, { recursive: true, mode: secret ? 0o700 : 0o755 });
   if (secret && process.platform !== 'win32') chmodSync(directory, 0o700);
-  if (existsSync(file) && lstatSync(file).isSymbolicLink()) throw new Error('Hedef dosya sembolik baglanti olamaz.');
+  if (existsSync(file) && lstatSync(file).isSymbolicLink()) throw new Error(err.secretFileSymlink);
   const temporary = join(directory, '.write-' + randomUUID() + '.tmp');
   let descriptor;
   try {

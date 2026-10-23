@@ -1,6 +1,8 @@
+import { err } from './messages.mjs';
+
 export function readSecret(label, { input = process.stdin, output = process.stdout } = {}) {
   if (!input.isTTY || typeof input.setRawMode !== 'function')
-    return Promise.reject(new Error('Gizli giris icin interaktif terminal acin. Anahtari komut argumanina yazmayin.'));
+    return Promise.reject(new Error(err.secretNeedTty));
   return new Promise((accept, reject) => {
     let value = '';
     const wasRaw = Boolean(input.isRaw);
@@ -15,7 +17,7 @@ export function readSecret(label, { input = process.stdin, output = process.stdo
       input.pause();
       output.write('\n');
     }
-    function onEnd() { cleanup(); value = ''; reject(new Error('Gizli giris iptal edildi.')); }
+    function onEnd() { cleanup(); value = ''; reject(new Error(err.secretCancelled)); }
     function onData(chunk) {
       for (const character of chunk) {
         if (character === '\u0003' || character === '\u0004') { onEnd(); return; }

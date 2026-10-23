@@ -31,12 +31,12 @@ test('interactive private key entry masks pasted input and restores the terminal
   assert.equal(t.input.listenerCount('data'), 0);
 });
 test('secret entry rejects non-interactive input and Ctrl+C without echoing secrets', async () => {
-  await assert.rejects(readSecret('Key', { input: { isTTY: false }, output: {} }), /interaktif/);
+  await assert.rejects(readSecret('Key', { input: { isTTY: false }, output: {} }), /交互式终端/);
   const t = terminal();
   const pending = readSecret('Key', t);
   t.input.write('hidden');
   t.input.write('\u0003');
-  await assert.rejects(pending, /iptal/);
+  await assert.rejects(pending, /取消/);
   assert.ok(!t.text().includes('hidden'));
   assert.equal(t.input.isRaw, false);
 });
@@ -60,7 +60,7 @@ test('portable key setup writes encrypted data and the CLI loader rejects incorr
     assert.ok(!messages.join('\n').includes(wallet.privateKey));
     mkdirSync(join(fixture, 'scripts'));
     mkdirSync(join(fixture, 'config'));
-    for (const name of ['lib.mjs', 'storage.mjs', 'tx-journal.mjs', 'task-context.mjs'])
+    for (const name of ['lib.mjs', 'storage.mjs', 'tx-journal.mjs', 'task-context.mjs', 'messages.mjs'])
       copyFileSync(join(root, 'scripts', name), join(fixture, 'scripts', name));
     copyFileSync(join(root, 'config/qms-testnet.json'), join(fixture, 'config/qms-testnet.json'));
     const { loadWallet } = await import(pathToFileURL(join(fixture, 'scripts/lib.mjs')).href);
@@ -69,11 +69,11 @@ test('portable key setup writes encrypted data and the CLI loader rejects incorr
     assert.equal(loadWallet().address, wallet.address);
     assert.equal(process.env.QMS_KEYSTORE_PASSWORD, undefined);
     process.env.QMS_KEYSTORE_PASSWORD = 'wrong-password';
-    assert.throws(() => loadWallet(), /Keystore acilamadi/);
+    assert.throws(() => loadWallet(), /keystore/i);
     assert.equal(process.env.QMS_KEYSTORE_PASSWORD, undefined);
     const refusedFile = join(fixture, '.secrets/refused.json');
     const mismatch = [wallet.privateKey, password, 'different-password'];
-    await assert.rejects(importPortableKey({ secret: async () => mismatch.shift(), file: refusedFile, write: () => {} }), /do not match/);
+    await assert.rejects(importPortableKey({ secret: async () => mismatch.shift(), file: refusedFile, write: () => {} }), /密码/);
     assert.ok(!existsSync(refusedFile));
   } finally {
     if (previousKey === undefined) delete process.env.QMS_PRIVATE_KEY; else process.env.QMS_PRIVATE_KEY = previousKey;

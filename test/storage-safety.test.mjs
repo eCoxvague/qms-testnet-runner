@@ -31,9 +31,9 @@ test('secret files reject symbolic link targets and restrict permissions', { ski
     assert.equal(statSync(secretFolder).mode & 0o777, 0o700);
     const victim = join(f.folder, 'outside.json'); writeFileSync(victim, 'unchanged');
     const link = join(secretFolder, 'linked.json'); symlinkSync(victim, link);
-    assert.throws(() => writeAtomic(link, 'replacement', { secret: true }), /sembolik/);
+    assert.throws(() => writeAtomic(link, 'replacement', { secret: true }), /符号链接/);
     assert.equal(readFileSync(victim, 'utf8'), 'unchanged');
     const folderLink = join(f.folder, 'linked-folder'); symlinkSync(secretFolder, folderLink);
-    assert.throws(() => writeAtomic(join(folderLink, 'another.json'), 'replacement', { secret: true }), /sembolik/);
+    assert.throws(() => writeAtomic(join(folderLink, 'another.json'), 'replacement', { secret: true }), /符号链接/);
   } finally { f.cleanup(); }
 });

@@ -63,10 +63,10 @@ test('accepted request followed by lost RPC response preserves the hash and bloc
   try {
     const original = f.provider.broadcastTransaction;
     f.provider.broadcastTransaction = async raw => { await original(raw); throw new Error('mock response loss'); };
-    await assert.rejects(f.send(true), /belirsiz/);
+    await assert.rejects(f.send(true), /不确定/);
     assert.equal(f.records()[0].status, 'broadcast-unknown');
     assert.equal(f.records()[0].hash, f.state.hash);
-    await assert.rejects(f.send(true), /sonucu belirsiz/);
+    await assert.rejects(f.send(true), /未决/);
     assert.equal(f.state.broadcasts, 1);
     assert.equal(f.state.signatures, 1);
   } finally { f.cleanup(); }
@@ -76,7 +76,7 @@ test('receipt timeout is recoverable and a later mined receipt is reconciled bef
   try {
     const healthyWait = f.provider.waitForTransaction;
     f.provider.waitForTransaction = async () => { throw new Error('mock timeout'); };
-    await assert.rejects(f.send(true), /Receipt/);
+    await assert.rejects(f.send(true), /收据/);
     assert.equal(f.records()[0].status, 'receipt-timeout');
     f.provider.getTransactionReceipt = healthyWait;
     f.provider.waitForTransaction = healthyWait;
@@ -102,7 +102,7 @@ test('wrong chain and dry runs do not sign or broadcast transactions', async () 
     assert.equal(f.state.broadcasts, 0);
     let reads = 0;
     f.provider.send = async () => ++reads === 1 ? '0x4c18' : '0x1';
-    await assert.rejects(f.send(true), /Chain ID/);
+    await assert.rejects(f.send(true), /链 ID/);
     assert.equal(f.state.signatures, 0);
     assert.equal(f.state.broadcasts, 0);
   } finally { f.cleanup(); }
@@ -112,7 +112,7 @@ test('a wallet lock prevents simultaneous submissions', () => {
   try {
     const journal = createJournal(f.folder, 19480, f.account.address);
     const release = journal.acquire();
-    try { assert.throws(() => journal.acquire(), /baska islem/); }
+    try { assert.throws(() => journal.acquire(), /另有交易/); }
     finally { release(); }
     const again = journal.acquire(); again();
   } finally { f.cleanup(); }
@@ -122,7 +122,7 @@ test('a mismatched signing key cannot broadcast a transaction under the expected
   try {
     const other = Wallet.createRandom();
     f.wallet.signTransaction = async tx => { const { from, ...rest } = tx; return other.signTransaction(rest); };
-    await assert.rejects(f.send(true), /beklenen cuzdan/);
+    await assert.rejects(f.send(true), /钱包/);
     assert.equal(f.state.broadcasts, 0);
     assert.equal(f.records().length, 0);
   } finally { f.cleanup(); }
@@ -166,7 +166,7 @@ test('streak journal blocks a second successful action in the same UTC task day 
     await f.send(true, 'QWAP QMS -> USDC');
     assert.equal(f.records()[0].operationId, vars.QMS_OPERATION_ID);
     f.provider.getTransactionReceipt = f.provider.waitForTransaction;
-    await assert.rejects(f.send(true, 'QWAP QMS -> USDC'), /zaten basarili/);
+    await assert.rejects(f.send(true, 'QWAP QMS -> USDC'), /已成功/);
     assert.equal(f.state.broadcasts, 1); assert.equal(f.state.signatures, 1);
   } finally { f.cleanup(); }
 });
@@ -175,7 +175,7 @@ test('expiry between signing and sending records not-broadcast and never calls t
   try {
     const { start, current } = scopedTask(t, f), sign = f.wallet.signTransaction;
     f.wallet.signTransaction = async tx => { const raw = await sign(tx); current.time = start + 86400000; return raw; };
-    await assert.rejects(f.send(true, 'QWAP QMS -> USDC'), /gunu disinda/);
+    await assert.rejects(f.send(true, 'QWAP QMS -> USDC'), /任务日/);
     assert.equal(f.state.broadcasts, 0);
     assert.equal(f.records()[0].status, 'not-broadcast');
   } finally { f.cleanup(); }
@@ -185,7 +185,7 @@ test('a local clock ahead of campaign start cannot bypass the latest chain block
   try {
     const { start } = scopedTask(t, f);
     f.provider.getBlock = async () => ({ timestamp: (start - 1000) / 1000 });
-    await assert.rejects(f.send(true, 'QWAP QMS -> USDC'), /gunu disinda/);
+    await assert.rejects(f.send(true, 'QWAP QMS -> USDC'), /任务日/);
     assert.equal(f.state.broadcasts, 0); assert.equal(f.state.signatures, 0);
   } finally { f.cleanup(); }
 });
