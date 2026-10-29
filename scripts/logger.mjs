@@ -81,9 +81,14 @@ export function createLogger({ write = line => console.log(line), record = () =>
         detail(`${result.network} · chain ${result.chainId} · son blok #${result.latestBlock}`);
         if (result.dexVerified) detail('QWAP router, token ve havuz ilişkileri doğrulandı.', 'green');
       }
-      if (result.qms !== undefined) {
+      if (result.qms !== undefined && result.address && result.usdc !== undefined && result.lpRaw !== undefined) {
         if (!walletShown) { detail(`Cüzdan: ${result.address}`); walletShown = true; }
         detail(`Bakiye: ${amount(result.qms)} QMS · ${amount(result.usdc)} USDC · LP ${result.lpRaw} raw`);
+        for (const legacy of result.deprecatedPositions ?? []) {
+          if (legacy.status === 'deprecated' && (BigInt(legacy.lpRaw) > 0n || Number(legacy.usdc) > 0))
+            detail(`Eski havuz (${legacy.deployment}): ${legacy.usdc} eski USDC · LP ${legacy.lpRaw} raw · yeni havuza taşınmadı.`, 'yellow');
+          else if (legacy.status === 'unavailable') detail(`Eski havuz bakiyesi okunamadı: ${legacy.deployment}`, 'yellow');
+        }
       }
       if (result.quotedUsdc !== undefined)
         detail(`Teklif: ${result.inputQms} QMS → ${result.quotedUsdc} USDC · minimum ${result.minimumUsdc} USDC`);

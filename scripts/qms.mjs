@@ -56,7 +56,7 @@ async function dex() {
   if (!equal(rf, c.factory) || !equal(rw, c.wqms) || !equal(fp, c.wqmsUsdcPair) || !equal(pf, c.factory)
       || ![token0, token1].some(t => equal(t, c.wqms)) || ![token0, token1].some(t => equal(t, c.usdc)))
     throw new Error('QWAP router/factory/token/pool iliskisi dogrulanamadi.');
-  if (symbol !== 'USDC' || Number(decimals) > 18) throw new Error('USDC metadatasi beklenen degerde degil.');
+  if (symbol !== 'USDC' || Number(decimals) !== 6) throw new Error('USDC metadatasi beklenen degerde degil.');
   if (reserves[0] === 0n || reserves[1] === 0n) throw new Error('Havuzda likidite yok.');
   return { router, usdc, pair, decimals: Number(decimals), token0, reserves };
 }
@@ -158,7 +158,7 @@ async function main() {
     const report = { checkedAt: new Date().toISOString(), network: config.name, chainId: config.chainId,
       rpcUrl: config.rpcUrl, latestBlock: latest.number, latestBlockHash: latest.hash,
       safeBlock: safe?.number, finalizedBlock: finalized?.number,
-      confirmationsUsed: config.confirmations, dexVerified: true, contracts: c,
+      confirmationsUsed: config.confirmations, dexVerified: true, contracts: c, dexDeployment: config.dexDeployment,
       usdcDecimals: data.decimals, reserves: data.reserves.toArray(),
       note: 'safe/finalized mevcut surumde genesis dondurebilir; receipt + blok onayi kullanilir.' };
     save('reports/status.json', report); output(report);
@@ -171,7 +171,20 @@ async function main() {
     const address = values.address ? getAddress(values.address) : loadWallet(provider).address;
     const data = await dex();
     const [balance, usdc, lp] = await Promise.all([provider.getBalance(address), data.usdc.balanceOf(address), data.pair.balanceOf(address)]);
+    const deprecatedPositions = await Promise.all((config.deprecatedDeployments ?? []).map(async deployment => {
+      const legacy = deployment.contracts;
+      const base = { deployment: deployment.id, usdcAddress: legacy.usdc, pair: legacy.wqmsUsdcPair, deprecatedAt: deployment.deprecatedAt };
+      try {
+        const [legacyUsdc, legacyLp] = await Promise.all([
+          new Contract(legacy.usdc, tokenAbi, provider).balanceOf(address),
+          new Contract(legacy.wqmsUsdcPair, pairAbi, provider).balanceOf(address),
+        ]);
+        return { ...base, status: 'deprecated', usdc: formatUnits(legacyUsdc, 6), lpRaw: legacyLp,
+          note: 'Eski token ve LP, yeni token/LP ile ayni degildir; otomatik tasinmaz.' };
+      } catch (error) { return { ...base, status: 'unavailable', error: safeError(error) }; }
+    }));
     output({ address, qms: formatEther(balance), usdc: formatUnits(usdc, data.decimals), lpRaw: lp,
+      usdcAddress: c.usdc, pair: c.wqmsUsdcPair, dexDeployment: config.dexDeployment?.id, deprecatedPositions,
       faucet: config.faucetUrl, qwap: config.qwapUrl, explorer: `${config.explorerUrl}/address/${address}` }); return;
   }
   const wallet = loadWallet(provider);

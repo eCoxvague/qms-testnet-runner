@@ -5,7 +5,11 @@
 Tek komutla QMS kontrat deploy, sayaç testi, QWAP swap/likidite ve QUBO çözüm değeri kontrolü.
 Bağımsız topluluk aracıdır; resmî QMS/QWAP ürünü değildir.
 
+**29 Ekim havuz güncellemesi:** yeni USDC ve WQMS/USDC adresleri kullanılır. Cüzdan çıktısı eski token/LP pozisyonlarını ayrı gösterir. [Ayrıntılar ve komutlar](docs/pool-update-2026-10-29.md).
+
 ## 19 Ekim Testnet Streak
+
+Bu kampanya **26 Ekim 2026 16:00 Türkiye** saatinde bitti. Kayıtlar korunur; havuz güncellemesi kampanyayı yeniden başlatmaz.
 
 19 Ekim 2026 Pazartesi **16:00 Türkiye** başlangıcına göre günlük 1 swap + 1 LP modu hazırdır.
 Başlangıçtan önce işlem göndermez; aynı günde tamamlanan işlemleri tekrarlamaz ve yarım kalan LP'ye devam eder.

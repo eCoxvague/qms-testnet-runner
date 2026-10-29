@@ -154,3 +154,42 @@ test('liquidity requires both a pair Mint and an LP transfer to the same wallet'
   receipt.logs.pop();
   assert.equal((await verifyStreakTransaction(provider, record, address, 101)).status, 'invalid');
 });
+
+test('old swap proofs survive a pool update, but deprecated routes after the cutoff are rejected', async () => {
+  const legacy = config.deprecatedDeployments[0];
+  const c = legacy.contracts;
+  const iface = new Interface(routerAbi), events = new Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
+  let timestamp = Date.parse('2026-10-19T13:05:00Z') / 1000;
+  const receipt = { status: 1, blockNumber: 100, logs: [{ address: c.usdc,
+    ...events.encodeEventLog('Transfer', [c.wqmsUsdcPair, address, 100n]) }] };
+  const provider = { getTransactionReceipt: async () => receipt, getBlock: async () => ({ timestamp }),
+    getTransaction: async () => ({ from: address, to: c.router, chainId: 19480n, value: parseEther('0.2'),
+      data: iface.encodeFunctionData('swapExactETHForTokens', [1n, [c.wqms, c.usdc], address, 9999999999]) }) };
+  const record = { hash: 'legacy-fixture', operationId: operationId(address, 1, 'swap') };
+  assert.equal((await verifyStreakTransaction(provider, record, address, 101)).status, 'confirmed');
+  timestamp = Date.parse(legacy.deprecatedAt) / 1000 - 1;
+  assert.equal((await verifyStreakTransaction(provider, record, address, 101)).status, 'confirmed');
+  timestamp++;
+  assert.equal((await verifyStreakTransaction(provider, record, address, 101)).status, 'invalid');
+});
+
+test('legacy LP proofs require a consistent token/pair tuple and cannot mix new and old pools', async () => {
+  const c = config.deprecatedDeployments[0].contracts;
+  const iface = new Interface(routerAbi), events = new Interface(['event Mint(address indexed sender,uint256 amount0,uint256 amount1)',
+    'event Transfer(address indexed from,address indexed to,uint256 value)']);
+  const receipt = { status: 1, blockNumber: 100, logs: [
+    { address: c.wqmsUsdcPair, ...events.encodeEventLog('Mint', [c.router, 1000n, 100n]) },
+    { address: c.wqmsUsdcPair, ...events.encodeEventLog('Transfer', [ZeroAddress, address, 10n]) },
+  ] };
+  let timestamp = Date.parse('2026-10-20T13:05:00Z') / 1000;
+  const provider = { getTransactionReceipt: async () => receipt, getBlock: async () => ({ timestamp }),
+    getTransaction: async () => ({ from: address, to: c.router, chainId: 19480n, value: parseEther('0.1'),
+      data: iface.encodeFunctionData('addLiquidityETH', [c.usdc, 100n, 1n, 1n, address, 9999999999]) }) };
+  const record = { hash: 'legacy-lp-fixture', operationId: operationId(address, 2, 'liquidity') };
+  assert.equal((await verifyStreakTransaction(provider, record, address, 101)).kind, 'liquidity');
+  for (const log of receipt.logs) log.address = config.contracts.wqmsUsdcPair;
+  assert.equal((await verifyStreakTransaction(provider, record, address, 101)).status, 'invalid');
+  for (const log of receipt.logs) log.address = c.wqmsUsdcPair;
+  timestamp = Date.parse(config.deprecatedDeployments[0].deprecatedAt) / 1000;
+  assert.equal((await verifyStreakTransaction(provider, record, address, 101)).status, 'invalid');
+});

@@ -17,26 +17,35 @@ export async function verifyStreakTransaction(provider, record, address, head) {
   // Approvals are tracked for unresolved sends but never count as the liquidity task.
   if (record.action?.startsWith('approve ')) return { ...base, status: 'approval-confirmed' };
   const [tx, block] = await Promise.all([provider.getTransaction(record.hash), provider.getBlock(receipt.blockNumber)]);
-  if (!tx || !block || !eq(tx.from, address) || !eq(tx.to, config.contracts.router) || BigInt(tx.chainId) !== 19480n)
+  if (!tx || !block || !eq(tx.from, address) || BigInt(tx.chainId) !== 19480n)
     return { ...base, status: 'invalid', reason: 'Islem agi, gonderici veya router eslesmiyor.' };
+  // Historical proofs stay valid against their original deployment. Deprecated
+  // tuples are eligible only before the announced cutoff, using the mined time.
+  const deployments = [config.contracts, ...(config.deprecatedDeployments ?? [])
+    .filter(deployment => Number.isFinite(Date.parse(deployment.deprecatedAt)) && block.timestamp * 1000 < Date.parse(deployment.deprecatedAt))
+    .map(deployment => deployment.contracts)].filter(contracts => eq(tx.to, contracts.router));
+  if (!deployments.length) return { ...base, status: 'invalid', reason: 'Router kayitli QWAP deployment ile eslesmiyor.' };
   let call;
   try { call = router.parseTransaction({ data: tx.data, value: tx.value }); } catch { /* checked below */ }
   const parsed = receipt.logs.map(log => {
     try { return { address: log.address, event: events.parseLog(log) }; } catch { return null; }
   }).filter(Boolean);
   let kind;
-  if (call?.name === 'swapExactETHForTokens' && tx.value > 0n && eq(call.args[2], address)
-      && call.args[1].length === 2 && eq(call.args[1][0], config.contracts.wqms) && eq(call.args[1][1], config.contracts.usdc)) {
-    const transfer = parsed.some(log => eq(log.address, config.contracts.usdc) && log.event?.name === 'Transfer'
-      && eq(log.event.args.from, config.contracts.wqmsUsdcPair) && eq(log.event.args.to, address) && log.event.args.value > 0n);
-    if (transfer) kind = 'swap';
-  }
-  if (call?.name === 'addLiquidityETH' && tx.value > 0n && eq(call.args[0], config.contracts.usdc) && eq(call.args[4], address)) {
-    const mint = parsed.some(log => eq(log.address, config.contracts.wqmsUsdcPair) && log.event?.name === 'Mint'
-      && log.event.args.amount0 > 0n && log.event.args.amount1 > 0n);
-    const lp = parsed.some(log => eq(log.address, config.contracts.wqmsUsdcPair) && log.event?.name === 'Transfer'
-      && eq(log.event.args.from, ZeroAddress) && eq(log.event.args.to, address) && log.event.args.value > 0n);
-    if (mint && lp) kind = 'liquidity';
+  for (const contracts of deployments) {
+    if (call?.name === 'swapExactETHForTokens' && tx.value > 0n && eq(call.args[2], address)
+        && call.args[1].length === 2 && eq(call.args[1][0], contracts.wqms) && eq(call.args[1][1], contracts.usdc)) {
+      const transfer = parsed.some(log => eq(log.address, contracts.usdc) && log.event?.name === 'Transfer'
+        && eq(log.event.args.from, contracts.wqmsUsdcPair) && eq(log.event.args.to, address) && log.event.args.value > 0n);
+      if (transfer) kind = 'swap';
+    }
+    if (call?.name === 'addLiquidityETH' && tx.value > 0n && eq(call.args[0], contracts.usdc) && eq(call.args[4], address)) {
+      const mint = parsed.some(log => eq(log.address, contracts.wqmsUsdcPair) && log.event?.name === 'Mint'
+        && log.event.args.amount0 > 0n && log.event.args.amount1 > 0n);
+      const lp = parsed.some(log => eq(log.address, contracts.wqmsUsdcPair) && log.event?.name === 'Transfer'
+        && eq(log.event.args.from, ZeroAddress) && eq(log.event.args.to, address) && log.event.args.value > 0n);
+      if (mint && lp) kind = 'liquidity';
+    }
+    if (kind) break;
   }
   if (!kind || !record.operationId.endsWith(':' + kind))
     return { ...base, status: 'invalid', reason: 'Swap veya LP icin beklenen calldata/event bulunamadi.' };

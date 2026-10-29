@@ -3,6 +3,18 @@ import assert from 'node:assert/strict';
 import { createOutputParser } from '../scripts/workflow.mjs';
 import { createLogger, cleanAnsi } from '../scripts/logger.mjs';
 
+test('liquidity plans are not logged as wallets and deprecated positions remain clearly separate', () => {
+  const lines = [];
+  const logger = createLogger({ color: false, write: line => lines.push(line) });
+  logger.result({ action: 'add WQMS/USDC liquidity', qms: '0.1', usdcDesired: '0.05', approvalNeeded: true });
+  assert.ok(!lines.join('\n').includes('undefined'));
+  assert.ok(!lines.join('\n').includes('Cüzdan:'));
+  logger.result({ address: 'test-wallet', qms: '8', usdc: '0.1', lpRaw: '10',
+    deprecatedPositions: [{ deployment: 'legacy', status: 'deprecated', usdc: '2', lpRaw: '20' }] });
+  assert.match(lines.join('\n'), /eski USDC/);
+  assert.match(lines.join('\n'), /yeni havuza taşınmadı/);
+});
+
 test('streamed objects render only when complete, even when escapes and braces cross chunks', () => {
   const first = { hash: '0x123', explorer: 'https://example.test/{block}', note: 'escaped " and \\ end' };
   const second = { status: 'confirmed', blockNumber: 12 };

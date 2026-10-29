@@ -10,7 +10,11 @@ One command to deploy a contract, call it, swap on QWAP, add liquidity, and veri
 Community tooling based on the [official QMS onboarding guide](https://qms.finance/news/welcome-to-qms-testnet).
 Independently maintained; not an official QMS or QWAP product.
 
+**29 October pool update:** active USDC and WQMS/USDC addresses are updated. Wallet output separates deprecated positions from the active pool. [Details and commands](docs/pool-update-2026-10-29.md).
+
 ## 19 October Testnet Streak
+
+This seven-day campaign ended on 26 October 2026 at 13:00 UTC. Its schedule and historical records are retained; changing pools does not start a new campaign.
 
 Dedicated daily swap + LP mode, with UTC day boundaries, receipt/event verification, duplicate-send guards,
 partial-run recovery, and local 6-of-7 progress estimates. It reuses the current wallet and does not deploy contracts.
