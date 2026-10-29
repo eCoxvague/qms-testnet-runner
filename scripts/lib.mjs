@@ -113,6 +113,18 @@ export async function submit(provider, wallet, tx, label, broadcast, journalRoot
   const task = taskContext();
   assertTaskWindow(task);
   if (task && task.address.toLowerCase() !== wallet.address.toLowerCase()) throw new Error('Streak cuzdan baglami eslesmiyor.');
+  if (task?.type === 'daily') {
+    const target = tx.to?.toLowerCase(), value = tx.value ?? 0n;
+    const swap = task.kind.startsWith('swap-') && label === 'QWAP QMS -> USDC'
+      && target === config.contracts.router.toLowerCase() && value > 0n && value <= parseEther('0.1');
+    const liquidity = task.kind === 'liquidity' && label === 'QWAP add WQMS/USDC liquidity'
+      && target === config.contracts.router.toLowerCase() && value > 0n && value <= parseEther('0.05');
+    const approval = task.kind === 'liquidity' && label === 'approve exact USDC for QWAP liquidity'
+      && target === config.contracts.usdc.toLowerCase() && value === 0n;
+    const increment = task.kind === 'increment' && label === 'increment QmsCounter'
+      && target === task.counter.toLowerCase() && value === 0n;
+    if (!swap && !liquidity && !approval && !increment) throw new Error('Gunluk adimin hedefi, miktari veya islemi beklenen planla eslesmiyor.');
+  }
   if ((tx.value ?? 0n) < 0n || (tx.value ?? 0n) > parseEther(config.maxActionQms))
     throw new Error('Islem native miktar sinirini asiyor.');
   assertTestnet(await provider.send('eth_chainId', []));
@@ -133,6 +145,7 @@ export async function submit(provider, wallet, tx, label, broadcast, journalRoot
   try {
     await journal.checkUnresolved(provider, config.confirmations);
     await journal.checkOperation(provider, task, label);
+    await journal.checkDailyOperation(provider, task, label, tx.value ?? 0n, maxFee);
     if (task) {
       const head = await provider.getBlock('latest');
       if (!head) throw new Error('Streak icin son blok zamani okunamadi.');
@@ -152,6 +165,7 @@ export async function submit(provider, wallet, tx, label, broadcast, journalRoot
     const hash = keccak256(raw);
     const record = { action: label, chainId: config.chainId, hash, nonce: decoded.nonce,
       from: wallet.address, to: decoded.to, preparedAt: new Date().toISOString(), status: 'prepared',
+      valueQms: formatEther(decoded.value), maxFeeQms: formatEther(maxFee),
       explorer: `${config.explorerUrl}/tx/${hash}` };
     if (task) record.operationId = task.id;
     // Persist the hash BEFORE any network send. Never persist the replayable signed payload.

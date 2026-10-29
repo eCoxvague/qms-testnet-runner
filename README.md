@@ -12,6 +12,19 @@ Independently maintained; not an official QMS or QWAP product.
 
 **29 October pool update:** active USDC and WQMS/USDC addresses are updated. Wallet output separates deprecated positions from the active pool. [Details and commands](docs/pool-update-2026-10-29.md).
 
+## Daily testnet activity
+
+Separate from the finished streak: two small swaps, one LP deposit and one existing counter interaction per day. Up to five transactions including approval/reverts; 0.25 QMS native per day, with independent journal guards and a 30-day cutoff.
+
+```sh
+npm run daily:prepare
+npm run daily -- --dry-run
+npm run daily
+npm run daily:status
+```
+
+Optional Windows scheduling: `npm run daily:install` / `npm run daily:uninstall`. Default checks start at 13:15 UTC (16:15 Turkey), retry hourly and skip completed steps. The current profile ends 28 November 2026 at 13:00 UTC. [Details, budgets and recovery](docs/daily.md).
+
 ## 19 October Testnet Streak
 
 This seven-day campaign ended on 26 October 2026 at 13:00 UTC. Its schedule and historical records are retained; changing pools does not start a new campaign.

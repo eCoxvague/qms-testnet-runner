@@ -1,0 +1,11 @@
+{
+  "id": "2026-10-29",
+  "startsAt": "2026-10-29T13:00:00.000Z",
+  "days": 30,
+  "swapAmountQms": "0.1",
+  "liquidityAmountQms": "0.05",
+  "slippageBps": 100,
+  "maxTransactions": 5,
+  "maxNativeQms": "0.25",
+  "maxGasQms": "0.25"
+}

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync, fsyncSync, mkdirSync, openSync, closeSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { getAddress, formatEther } from 'ethers';
+import { getAddress, formatEther, parseEther } from 'ethers';
 import { writeAtomic } from './storage.mjs';
 
 const unresolved = new Set(['prepared', 'pending', 'submitted', 'broadcast-unknown', 'receipt-timeout']);
@@ -44,6 +44,7 @@ export function createJournal(projectRoot, chainId, address) {
       }
     },
     async checkOperation(provider, context, action) {
+      if (context?.type === 'daily') return; // Daily guards distinguish the two swap slots below.
       // Repeatable approvals are allowed; successful swap/deposit actions are not repeated in a task day.
       if (!context || !['QWAP QMS -> USDC', 'QWAP add WQMS/USDC liquidity'].includes(action) || !existsSync(folder)) return;
       for (const name of readdirSync(folder).filter(name => /^tx-0x[\da-f]{64}\.json$/i.test(name))) {
@@ -60,6 +61,34 @@ export function createJournal(projectRoot, chainId, address) {
         if (time >= context.start && time < context.end)
           throw new Error('Bu gorev gununde bu streak islemi zaten basarili; tekrar gonderilmedi.');
       }
+    },
+    async checkDailyOperation(provider, context, action, value, maxFee) {
+      if (context?.type !== 'daily') return;
+      let count = 0, native = 0n, fees = 0n;
+      if (existsSync(folder)) for (const name of readdirSync(folder).filter(name => /^tx-0x[\da-f]{64}\.json$/i.test(name))) {
+        const record = JSON.parse(readFileSync(resolve(folder, name), 'utf8'));
+        if (record.chainId !== chainId || record.from?.toLowerCase() !== wallet.toLowerCase()
+            || !/^daily-\d{4}-\d{2}-\d{2}:[\da-f]{40}:\d{4}-\d{2}-\d{2}:(swap-[12]|liquidity|increment)$/.test(record.operationId ?? '')
+            || record.status === 'not-broadcast') continue;
+        const receipt = await provider.getTransactionReceipt(record.hash);
+        if (!receipt) throw new Error('Onceki gunluk aktivite islemi belirsiz; tekrar gonderilmedi.');
+        const block = await provider.getBlock(receipt.blockNumber);
+        if (!block) throw new Error('Gunluk islem blok zamani okunamadi.');
+        const time = block.timestamp * 1000;
+        if (time < context.start || time >= context.end) continue;
+        const tx = await provider.getTransaction(record.hash);
+        if (!tx || tx.from?.toLowerCase() !== wallet.toLowerCase() || BigInt(tx.chainId) !== BigInt(chainId))
+          throw new Error('Gunluk butce icin zincir islemi dogrulanamadi.');
+        count++;
+        if (receipt.status === 1) native += tx.value;
+        fees += receipt.fee;
+        if (receipt.status === 1 && !action.startsWith('approve ')
+            && record.action === action && record.operationId.split(':').at(-1) === context.kind)
+          throw new Error('Bu gunluk aktivite adimi zaten basarili; tekrar gonderilmedi.');
+      }
+      if (count >= 5) throw new Error('Gunluk 5 zincir islemi siniri doldu (approval ve revert dahil).');
+      if (native + value > parseEther('0.25')) throw new Error('Gunluk 0.25 QMS native harcama siniri asiliyor.');
+      if (fees + maxFee > parseEther('0.25')) throw new Error('Gunluk 0.25 QMS gas siniri asiliyor.');
     },
   };
 }

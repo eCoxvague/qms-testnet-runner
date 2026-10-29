@@ -5,13 +5,16 @@ import { config, root, loadWallet, safeError } from './lib.mjs';
 import { hasStoredKey, importPrivateKey, keystoreFile, dpapiFile } from './key-manager.mjs';
 import { readSecret } from './secret-input.mjs';
 import { streakWindow } from './streak-calendar.mjs';
+import { dailyWindow } from './daily-plan.mjs';
 
 let password;
 try {
   const originalArgs = process.argv.slice(2);
   const streak = originalArgs.includes('--streak');
-  const args = originalArgs.filter(arg => arg !== '--streak');
-  const keyless = streak && (args.includes('--status') || (!args.includes('--prepare') && streakWindow().phase !== 'active'));
+  const daily = originalArgs.includes('--daily');
+  if(streak&&daily)throw new Error('Gunluk aktivite ve streak ayni komutta kullanilamaz.');
+  const args = originalArgs.filter(arg => !['--streak','--daily'].includes(arg));
+  const keyless = (streak||daily) && (args.includes('--status') || (!args.includes('--prepare') && (daily?dailyWindow():streakWindow()).phase !== 'active'));
   const needsWallet = !args.includes('--help') && !keyless;
   if (needsWallet) {
     console.log('\nQMS Testnet Runner · local wallet setup\n');
@@ -31,7 +34,7 @@ try {
       const wallet = loadWallet();
       console.log('Wallet: ' + wallet.address);
       console.log('Free test QMS faucet: ' + config.faucetUrl);
-      console.log(`Workflow requires ${streak ? '0.55' : '0.65'} QMS with default amounts and gas reserves.\n`);
+      console.log(`Workflow requires ${daily?'0.6':streak ? '0.55' : '0.65'} QMS with default amounts and gas reserves.\n`);
     } finally {
       delete process.env.QMS_KEYSTORE_PASSWORD;
       if (suppliedKey !== undefined) process.env.QMS_PRIVATE_KEY = suppliedKey;
@@ -39,7 +42,7 @@ try {
   }
   const code = await new Promise((accept, reject) => {
     if (keyless) { delete childEnv.QMS_PRIVATE_KEY; delete childEnv.QMS_KEYSTORE_PASSWORD; }
-    const child = spawn(process.execPath, [resolve(root, streak ? 'scripts/run-streak.mjs' : 'scripts/run-all.mjs'), '--broadcast', ...args],
+    const child = spawn(process.execPath, [resolve(root, daily?'scripts/run-daily.mjs':streak ? 'scripts/run-streak.mjs' : 'scripts/run-all.mjs'), '--broadcast', ...args],
       { cwd: root, env: childEnv, stdio: 'inherit', windowsHide: true });
     const interrupt = () => child.kill('SIGINT');
     process.once('SIGINT', interrupt);

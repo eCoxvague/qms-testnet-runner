@@ -7,6 +7,19 @@ Bağımsız topluluk aracıdır; resmî QMS/QWAP ürünü değildir.
 
 **29 Ekim havuz güncellemesi:** yeni USDC ve WQMS/USDC adresleri kullanılır. Cüzdan çıktısı eski token/LP pozisyonlarını ayrı gösterir. [Ayrıntılar ve komutlar](docs/pool-update-2026-10-29.md).
 
+## Günlük testnet aktivitesi
+
+Biten streak'ten ayrı olarak: günde iki küçük swap, bir LP ekleme ve mevcut test sayacıyla bir etkileşim. Approval/revert dahil günlük en fazla 5 zincir işlemi; 0.25 QMS native tutar; tekrar koruması ve 30 günlük bitiş sınırı.
+
+```sh
+npm run daily:prepare
+npm run daily -- --dry-run
+npm run daily
+npm run daily:status
+```
+
+Windows otomasyonu: `npm run daily:install`; kaldırma: `npm run daily:uninstall`. İlk günlük kontrol 16:15 Türkiye, ardından saatlik kontroller. Tamamlanan adımlar tekrarlanmaz. Mevcut profil 28 Kasım 2026 16:00 Türkiye'de biter. [Ayrıntılar, bütçe ve kayıtlar](docs/daily.md).
+
 ## 19 Ekim Testnet Streak
 
 Bu kampanya **26 Ekim 2026 16:00 Türkiye** saatinde bitti. Kayıtlar korunur; havuz güncellemesi kampanyayı yeniden başlatmaz.
